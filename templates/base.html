@@ -31,6 +31,7 @@
         <ul class="navbar-nav ms-auto align-items-lg-center gap-2 gap-lg-3 pt-3 pt-lg-0">
           <li class="nav-item"><a class="nav-link" href="{% url 'home' %}">Find a match</a></li>
           {% if user.is_authenticated %}
+            <li class="nav-item"><a class="nav-link" href="{% url 'joined_matches' %}">Joined matches</a></li>
             {% if user.is_organizer %}
               <li class="nav-item"><a class="nav-link" href="{% url 'my_matches' %}">My matches</a></li>
             {% endif %}
@@ -73,6 +74,14 @@
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // Disable a form's submit button once the form is sent, so a double click can't send it twice
+    document.addEventListener("submit", (event) => {
+      if (event.defaultPrevented) return;
+      const button = event.target.querySelector("button[type=submit]");
+      if (button) setTimeout(() => { button.disabled = true; }, 0);
+    });
+  </script>
   {% block extra_js %}{% endblock %}
 </body>
 </html>

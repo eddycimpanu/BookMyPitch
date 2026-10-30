@@ -76,9 +76,11 @@
 
       <ul class="lineup__list">
         {% for participation in match.participations.all %}
-          <li class="lineup__slot">
+          <li class="lineup__slot{% if participation.player == user %} lineup__slot--you{% endif %}">
             <span class="avatar">{{ participation.player.username|first|upper }}</span>
-            <span class="lineup__name">{{ participation.player.username }}</span>
+            <span class="lineup__name">
+              {{ participation.player.username }}{% if participation.player == user %} (you){% endif %}
+            </span>
             {% if user == match.organizer and not match.has_started %}
               <form method="post" action="{% url 'participation_remove' participation.pk %}"
                     onsubmit="return confirm('Remove {{ participation.player.username|escapejs }} from this match?');">
@@ -98,8 +100,35 @@
 
       {% if user == match.organizer %}
         <p class="lineup__note">You organize this match.</p>
+
+      {% elif is_joined %}
+        <p class="lineup__note lineup__note--joined">You have a spot in this match.</p>
+        {% if can_leave %}
+          <form method="post" action="{% url 'match_leave' match.pk %}"
+                onsubmit="return confirm('Give up your spot in this match?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-light w-100 mt-3">Leave match</button>
+          </form>
+        {% elif match.status != "cancelled" and not match.has_started %}
+          <p class="lineup__note small mt-2">
+            Leaving closes 2 hours before kick-off. Contact the organizer if you can't make it.
+          </p>
+        {% endif %}
+
+      {% elif can_join %}
+        {% if user.is_authenticated %}
+          <form method="post" action="{% url 'match_join' match.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-floodlight w-100">Join match</button>
+          </form>
+        {% else %}
+          <a href="{% url 'login' %}?next={{ request.path|urlencode }}" class="btn btn-floodlight w-100">Log in to join</a>
+        {% endif %}
+
       {% else %}
-        <button class="btn btn-floodlight w-100" disabled>Join match (available soon)</button>
+        <button class="btn btn-floodlight w-100" disabled>
+          {% if match.status == "cancelled" %}Match cancelled{% elif match.has_started %}Match started{% else %}Match full{% endif %}
+        </button>
       {% endif %}
     </aside>
   </div>

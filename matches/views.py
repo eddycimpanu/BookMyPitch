@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, Prefetch
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
@@ -13,6 +14,8 @@ from accounts.mixins import OrganizerRequiredMixin
 
 from .forms import MatchForm, PitchForm
 from .models import Match, Participation, Pitch
+from .services import LEAVE_DEADLINE, MatchActionError, join_match, leave_match
+
 
 def day_label(value):
     """Return 'Today', 'Tomorrow' or a date like 'Saturday 1 November', in local time."""
@@ -76,7 +79,6 @@ def pitches_api(request):
 
     return JsonResponse({"pitches": data})
 
-
 class MatchDetailView(DetailView):
     model = Match
     template_name = "matches/match_detail.html"
@@ -87,8 +89,18 @@ class MatchDetailView(DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # One empty row per free spot, shown in the lineup
-        context["open_slots"] = range(self.object.spots_left)
+        match = self.object
+        user = self.request.user
+
+        is_joined = user.is_authenticated and any(
+            participation.player_id == user.id for participation in match.participations.all()
+        )
+        is_open = match.status != Match.Status.CANCELLED and not match.has_started
+
+        context["open_slots"] = range(match.spots_left)
+        context["is_joined"] = is_joined
+        context["can_join"] = is_open and not is_joined and not match.is_full and user != match.organizer
+        context["can_leave"] = is_joined and timezone.now() <= match.start_time - LEAVE_DEADLINE
         return context
     
 # ---------- Organizer views ----------
@@ -200,3 +212,57 @@ class RemovePlayerView(OrganizerRequiredMixin, View):
 
         messages.success(request, f"{username} was removed from the match.")
         return redirect("match_detail", pk=match.pk)
+    
+# ---------- Player views ----------
+
+
+class JoinMatchView(LoginRequiredMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        match = get_object_or_404(Match, pk=pk)
+        try:
+            join_match(match.pk, request.user)
+        except MatchActionError as error:
+            messages.error(request, str(error))
+        else:
+            messages.success(request, "You're in! See you on the pitch.")
+        return redirect("match_detail", pk=match.pk)
+
+
+class LeaveMatchView(LoginRequiredMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        match = get_object_or_404(Match, pk=pk)
+        try:
+            leave_match(match.pk, request.user)
+        except MatchActionError as error:
+            messages.error(request, str(error))
+        else:
+            messages.success(request, "You left the match. Your spot is open again.")
+        return redirect("match_detail", pk=match.pk)
+
+
+class JoinedMatchesView(LoginRequiredMixin, ListView):
+    template_name = "matches/joined_matches.html"
+    context_object_name = "matches"
+
+    def get_queryset(self):
+        return (
+            Match.objects.filter(participations__player=self.request.user)
+            .select_related("pitch", "organizer")
+            .prefetch_related("participations")
+            .order_by("start_time")
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        now = timezone.now()
+        upcoming, past = [], []
+        for match in context["matches"]:
+            is_upcoming = match.start_time > now and match.status != Match.Status.CANCELLED
+            (upcoming if is_upcoming else past).append(match)
+        context["upcoming"] = upcoming
+        context["past"] = list(reversed(past))
+        return context

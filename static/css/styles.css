@@ -439,3 +439,10 @@ a:hover { color: var(--turf-dark); }
   text-decoration: underline;
 }
 .btn-remove:hover { color: #fff; }
+
+/* ---------- Player states in the lineup ---------- */
+.lineup__slot--you {
+  background: rgba(242, 194, 48, 0.18);
+  box-shadow: inset 0 0 0 1px var(--floodlight);
+}
+.lineup__note--joined { color: var(--floodlight); font-weight: 600; }

@@ -8,6 +8,11 @@ urlpatterns = [
     path("api/pitches/", views.pitches_api, name="pitches_api"),
     path("matches/<int:pk>/", views.MatchDetailView.as_view(), name="match_detail"),
 
+    # Players (any logged-in user)
+    path("matches/<int:pk>/join/", views.JoinMatchView.as_view(), name="match_join"),
+    path("matches/<int:pk>/leave/", views.LeaveMatchView.as_view(), name="match_leave"),
+    path("joined/", views.JoinedMatchesView.as_view(), name="joined_matches"),
+
     # Organizer
     path("organizer/matches/", views.MyMatchesView.as_view(), name="my_matches"),
     path("organizer/matches/new/", views.MatchCreateView.as_view(), name="match_create"),
