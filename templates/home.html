@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="text-center py-5">
+  <h1 class="display-5 fw-bold">Find your next match in Bucharest</h1>
+  <p class="lead text-muted">Join pickup games on synthetic pitches or organize your own.</p>
+  {% if not user.is_authenticated %}
+    <a href="{% url 'signup' %}" class="btn btn-success btn-lg">Get started</a>
+  {% endif %}
+  <p class="text-muted mt-4"><em>Interactive map coming soon.</em></p>
+</div>
+{% endblock %}
