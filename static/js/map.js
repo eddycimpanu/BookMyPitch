@@ -10,6 +10,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const matchMap = document.getElementById("match-map");
   if (matchMap) initMatchMap(matchMap);
+
+  const picker = document.getElementById("pitch-picker");
+  if (picker) initPitchPicker(picker);
 });
 
 /* ---------- Helpers ---------- */
@@ -186,4 +189,38 @@ function initMatchMap(element) {
   const position = [Number(element.dataset.lat), Number(element.dataset.lng)];
   const map = createBaseMap(element, position, 15, false);
   L.marker(position, { icon: pitchIcon(Number(element.dataset.spotsLeft)) }).addTo(map);
+}
+
+/* ---------- Add pitch: click the map to set the location ---------- */
+
+function initPitchPicker(element) {
+  const latInput = document.getElementById(element.dataset.latInput);
+  const lngInput = document.getElementById(element.dataset.lngInput);
+  const status = document.getElementById("picker-status");
+
+  // If the form was re-shown after an error, keep the point that was already chosen
+  const hasValue = latInput.value !== "" && lngInput.value !== "";
+  const start = hasValue ? [Number(latInput.value), Number(lngInput.value)] : BUCHAREST_CENTER;
+  const map = createBaseMap(element, start, hasValue ? 16 : 12);
+  let marker = null;
+
+  function place(latlng) {
+    const lat = latlng.lat.toFixed(6);
+    const lng = latlng.lng.toFixed(6);
+    latInput.value = lat;
+    lngInput.value = lng;
+
+    if (marker) {
+      marker.setLatLng(latlng);
+    } else {
+      marker = L.marker(latlng, { draggable: true }).addTo(map);
+      marker.on("dragend", () => place(marker.getLatLng()));
+    }
+
+    status.textContent = `Location set (${lat}, ${lng}). Drag the pin to adjust it.`;
+    status.classList.add("picker-status--set");
+  }
+
+  if (hasValue) place(L.latLng(start));
+  map.on("click", (event) => place(event.latlng));
 }

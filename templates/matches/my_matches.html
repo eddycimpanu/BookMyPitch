@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}My matches | BookMyPitch{% endblock %}
+
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>My matches</h1>
+    <p class="text-muted mb-0">Matches you organize.</p>
+  </div>
+  <a href="{% url 'match_create' %}" class="btn btn-success">Create match</a>
+</header>
+
+<h2 class="section-title">Upcoming</h2>
+
+{% if upcoming %}
+  <div class="organizer-list">
+    {% for match in upcoming %}
+      <article class="organizer-match">
+        <div class="organizer-match__when">
+          <span class="organizer-match__day">{{ match.start_time|date:"D j M" }}</span>
+          <span class="organizer-match__time">{{ match.start_time|date:"H:i" }}</span>
+        </div>
+
+        <div>
+          <h3 class="organizer-match__pitch">
+            <a href="{% url 'match_detail' match.pk %}">{{ match.pitch.name }}</a>
+          </h3>
+          <div class="match-item__spots">
+            {% include "includes/spot_dots.html" %}
+            <span>{{ match.spots_taken }} of {{ match.spots_needed }} joined</span>
+          </div>
+          {% if match.participations.all %}
+            <p class="organizer-match__players">
+              {% for participation in match.participations.all %}{{ participation.player.username }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            </p>
+          {% endif %}
+        </div>
+
+        <div class="organizer-match__actions">
+          <a href="{% url 'match_update' match.pk %}" class="btn btn-outline-secondary btn-sm">Edit</a>
+          <form method="post" action="{% url 'match_cancel' match.pk %}"
+                onsubmit="return confirm('Cancel this match? Players will see it as cancelled.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-danger btn-sm">Cancel match</button>
+          </form>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">
+    <p>You have no upcoming matches.</p>
+    <a href="{% url 'match_create' %}" class="btn btn-success">Create your first match</a>
+  </div>
+{% endif %}
+
+{% if past %}
+  <h2 class="section-title mt-5">Past and cancelled</h2>
+  <ul class="past-list">
+    {% for match in past %}
+      <li>
+        <a href="{% url 'match_detail' match.pk %}">{{ match.pitch.name }}</a>,
+        {{ match.start_time|date:"D j M, H:i" }}
+        {% if match.status == "cancelled" %}<span class="badge text-bg-danger ms-1">Cancelled</span>{% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+{% endif %}
+{% endblock %}

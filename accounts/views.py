@@ -2,10 +2,9 @@ from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.views import LoginView
 from django.urls import reverse_lazy
-from django.views.generic import CreateView, TemplateView
+from django.views.generic import CreateView
 
 from .forms import LoginForm, SignUpForm
-from .mixins import OrganizerRequiredMixin
 
 
 class SignUpView(CreateView):
@@ -24,7 +23,3 @@ class CustomLoginView(LoginView):
     authentication_form = LoginForm
     template_name = "accounts/login.html"
     redirect_authenticated_user = True
-
-
-class OrganizerDashboardView(OrganizerRequiredMixin, TemplateView):
-    template_name = "accounts/organizer_dashboard.html"

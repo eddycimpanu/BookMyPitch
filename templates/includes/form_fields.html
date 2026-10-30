@@ -2,9 +2,13 @@
   <div class="alert alert-danger">{{ error }}</div>
 {% endfor %}
 
-{% for field in form %}
+{% for field in form.hidden_fields %}
+  {{ field }}
+{% endfor %}
+
+{% for field in form.visible_fields %}
   <div class="mb-3">
-    <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
+    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
     {{ field }}
     {% if field.help_text %}
       <div class="form-text">{{ field.help_text|safe }}</div>

@@ -10,11 +10,13 @@ class BootstrapFormMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
-            if isinstance(field.widget, forms.RadioSelect):
-                field.widget.attrs["class"] = "form-check-input me-1"
-            else:
-                field.widget.attrs["class"] = "form-control"
-
+            widget = field.widget
+            if isinstance(widget, forms.RadioSelect):
+                widget.attrs["class"] = "form-check-input me-1"
+            elif isinstance(widget, forms.Select):
+                widget.attrs["class"] = "form-select"
+            elif not isinstance(widget, forms.HiddenInput):
+                widget.attrs["class"] = "form-control"
 
 class SignUpForm(BootstrapFormMixin, UserCreationForm):
     email = forms.EmailField(required=True)

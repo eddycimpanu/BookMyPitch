@@ -23,6 +23,17 @@
       <div class="alert alert-secondary">This match has already started.</div>
     {% endif %}
 
+    {% if user == match.organizer and match.status != "cancelled" and not match.has_started %}
+      <div class="organizer-tools">
+        <a href="{% url 'match_update' match.pk %}" class="btn btn-outline-secondary">Edit match</a>
+        <form method="post" action="{% url 'match_cancel' match.pk %}"
+              onsubmit="return confirm('Cancel this match? Players will see it as cancelled.');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-danger">Cancel match</button>
+        </form>
+      </div>
+    {% endif %}
+
     <div class="match-facts">
       <div class="fact">
         <span class="fact__label">Date</span>
@@ -67,7 +78,14 @@
         {% for participation in match.participations.all %}
           <li class="lineup__slot">
             <span class="avatar">{{ participation.player.username|first|upper }}</span>
-            {{ participation.player.username }}
+            <span class="lineup__name">{{ participation.player.username }}</span>
+            {% if user == match.organizer and not match.has_started %}
+              <form method="post" action="{% url 'participation_remove' participation.pk %}"
+                    onsubmit="return confirm('Remove {{ participation.player.username|escapejs }} from this match?');">
+                {% csrf_token %}
+                <button type="submit" class="btn-remove">Remove</button>
+              </form>
+            {% endif %}
           </li>
         {% endfor %}
         {% for slot in open_slots %}
@@ -78,7 +96,11 @@
         {% endfor %}
       </ul>
 
-      <button class="btn btn-floodlight w-100" disabled>Join match (available soon)</button>
+      {% if user == match.organizer %}
+        <p class="lineup__note">You organize this match.</p>
+      {% else %}
+        <button class="btn btn-floodlight w-100" disabled>Join match (available soon)</button>
+      {% endif %}
     </aside>
   </div>
 </div>

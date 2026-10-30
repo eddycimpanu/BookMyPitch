@@ -1,0 +1,1 @@
+<span class="spot-dots" aria-label="{{ match.spots_taken }} of {{ match.spots_needed }} spots taken">{% for taken in match.spot_states %}<i class="dot{% if taken %} dot--taken{% endif %}"></i>{% endfor %}</span>

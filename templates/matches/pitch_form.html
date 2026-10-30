@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Add a pitch | BookMyPitch{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'match_create' %}" class="back-link">Back to create match</a>
+<h1 class="mt-2">Add a pitch</h1>
+<p class="text-muted">Click the exact spot of the pitch on the map, then fill in its details.</p>
+
+<form method="post" novalidate class="row g-4">
+  {% csrf_token %}
+
+  <div class="col-lg-7">
+    <div class="pitch-frame">
+      <div id="pitch-picker"
+           data-lat-input="{{ form.latitude.id_for_label }}"
+           data-lng-input="{{ form.longitude.id_for_label }}"
+           role="application"
+           aria-label="Map: click to set the pitch location"></div>
+    </div>
+    <p id="picker-status" class="picker-status">No location selected yet.</p>
+    {% for error in form.latitude.errors %}
+      <div class="text-danger small">{{ error }}</div>
+    {% endfor %}
+  </div>
+
+  <div class="col-lg-5">
+    <div class="form-card">
+      {% include "includes/form_fields.html" %}
+      <button type="submit" class="btn btn-success btn-lg w-100">Add pitch</button>
+    </div>
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{% static 'js/map.js' %}"></script>
+{% endblock %}

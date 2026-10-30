@@ -115,6 +115,19 @@ class Match(models.Model):
         local_start = timezone.localtime(self.start_time)
         return f"{self.pitch.name} – {local_start:%d %b %Y, %H:%M}"
 
+
+    @property
+    def spot_states(self):
+        """One boolean per spot (True = taken). Used to draw the spot dots in templates."""
+        taken = min(self.spots_taken, self.spots_needed)
+        return [True] * taken + [False] * (self.spots_needed - taken)
+
+    def refresh_status(self):
+        """Keep status in sync with the number of players. Cancelled matches stay cancelled."""
+        if self.status == self.Status.CANCELLED:
+            return
+        self.status = self.Status.FULL if self.is_full else self.Status.ACTIVE
+        
     @property
     def spots_taken(self):
         return self.participations.count()
