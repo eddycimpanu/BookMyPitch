@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}{{ match.pitch.name }} · BookMyPitch{% endblock %}
+
+{% block content %}
+<a href="{% url 'home' %}" class="btn btn-link px-0 mb-3">&larr; Back to map</a>
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+          <h1 class="h3 mb-0">{{ match.pitch.name }}</h1>
+          {% if match.status == "cancelled" %}
+            <span class="badge bg-danger">Cancelled</span>
+          {% elif match.is_full %}
+            <span class="badge bg-secondary">Full</span>
+          {% else %}
+            <span class="badge bg-success">{{ match.spots_left }} spot{{ match.spots_left|pluralize }} left</span>
+          {% endif %}
+        </div>
+        <p class="text-muted">{{ match.pitch.address }} · {{ match.pitch.get_sector_display }}</p>
+
+        <dl class="row mb-0">
+          <dt class="col-sm-4">When</dt>
+          <dd class="col-sm-8">{{ match.start_time|date:"l, j F Y, H:i" }}</dd>
+
+          <dt class="col-sm-4">Duration</dt>
+          <dd class="col-sm-8">{{ match.get_duration_minutes_display }}</dd>
+
+          <dt class="col-sm-4">Price</dt>
+          <dd class="col-sm-8">
+            {% if match.price_per_player %}{{ match.price_per_player }} RON / player{% else %}Free{% endif %}
+          </dd>
+
+          <dt class="col-sm-4">Organizer</dt>
+          <dd class="col-sm-8">{{ match.organizer.username }}</dd>
+
+          {% if match.description %}
+            <dt class="col-sm-4">Details</dt>
+            <dd class="col-sm-8">{{ match.description|linebreaksbr }}</dd>
+          {% endif %}
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="h5">Players ({{ match.spots_taken }}/{{ match.spots_needed }})</h2>
+        <ul class="list-group list-group-flush mb-3">
+          {% for participation in match.participations.all %}
+            <li class="list-group-item px-0">{{ participation.player.username }}</li>
+          {% empty %}
+            <li class="list-group-item px-0 text-muted">No players yet. Be the first!</li>
+          {% endfor %}
+        </ul>
+        <button class="btn btn-success w-100" disabled>Join match (coming soon)</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
