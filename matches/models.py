@@ -63,6 +63,7 @@ class Match(models.Model):
         ONE_HOUR = 60, "1 hour"
         NINETY_MINUTES = 90, "1.5 hours"
         TWO_HOURS = 120, "2 hours"
+        THREE_HOURS = 180, "3 hours"
 
     pitch = models.ForeignKey(Pitch, on_delete=models.CASCADE, related_name="matches")
     organizer = models.ForeignKey(
@@ -171,3 +172,48 @@ class Participation(models.Model):
 
     def __str__(self):
         return f"{self.player} → {self.match}"
+    
+class MatchExit(models.Model):
+    """Records when a player left a match or was removed by the organizer.
+
+    Used to enforce the 1-hour rejoin cooldown and to keep removed players out.
+    """
+
+    class Reason(models.TextChoices):
+        LEFT = "left", "Left the match"
+        REMOVED = "removed", "Removed by the organizer"
+
+    match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name="exits")
+    player = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="match_exits",
+    )
+    reason = models.CharField(max_length=20, choices=Reason.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["match", "player"])]
+
+    def __str__(self):
+        return f"{self.player} {self.get_reason_display().lower()} ({self.match})"
+
+
+class ChatMessage(models.Model):
+    """A message in a match's team chat."""
+
+    match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name="messages")
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="chat_messages",
+    )
+    body = models.TextField(max_length=1000)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.author}: {self.body[:40]}"

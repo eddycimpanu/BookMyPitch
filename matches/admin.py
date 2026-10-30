@@ -1,7 +1,6 @@
 from django.contrib import admin
 
-from .models import Match, Participation, Pitch
-
+from .models import ChatMessage, Match, MatchExit, Participation, Pitch
 
 class ParticipationInline(admin.TabularInline):
     model = Participation
@@ -29,3 +28,15 @@ class MatchAdmin(admin.ModelAdmin):
 class ParticipationAdmin(admin.ModelAdmin):
     list_display = ("player", "match", "joined_at")
     search_fields = ("player__username", "match__pitch__name")
+    
+    
+@admin.register(MatchExit)
+class MatchExitAdmin(admin.ModelAdmin):
+    list_display = ("player", "match", "reason", "created_at")
+    list_filter = ("reason",)
+
+
+@admin.register(ChatMessage)
+class ChatMessageAdmin(admin.ModelAdmin):
+    list_display = ("author", "match", "body", "created_at")
+    search_fields = ("body", "author__username")

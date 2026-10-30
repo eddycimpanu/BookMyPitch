@@ -3,7 +3,7 @@ from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, Prefetch
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -13,9 +13,16 @@ from django.views.generic import CreateView, DetailView, ListView, TemplateView,
 from accounts.mixins import OrganizerRequiredMixin
 
 from .forms import MatchForm, PitchForm
-from .models import Match, Participation, Pitch
-from .services import LEAVE_DEADLINE, MatchActionError, join_match, leave_match
-
+from .models import ChatMessage, Match, Participation, Pitch
+from .services import (
+    LEAVE_DEADLINE,
+    MatchActionError,
+    can_use_chat,
+    join_match,
+    leave_match,
+    rejoin_block_reason,
+    remove_player,
+)
 
 def day_label(value):
     """Return 'Today', 'Tomorrow' or a date like 'Saturday 1 November', in local time."""
@@ -96,11 +103,20 @@ class MatchDetailView(DetailView):
             participation.player_id == user.id for participation in match.participations.all()
         )
         is_open = match.status != Match.Status.CANCELLED and not match.has_started
+        could_join = is_open and not is_joined and not match.is_full and user != match.organizer
 
-        context["open_slots"] = range(match.spots_left)
-        context["is_joined"] = is_joined
-        context["can_join"] = is_open and not is_joined and not match.is_full and user != match.organizer
-        context["can_leave"] = is_joined and timezone.now() <= match.start_time - LEAVE_DEADLINE
+        block_reason = None
+        if could_join and user.is_authenticated:
+            block_reason = rejoin_block_reason(match, user)
+
+        context.update({
+            "open_slots": range(match.spots_left),
+            "is_joined": is_joined,
+            "can_join": could_join and block_reason is None,
+            "join_block_reason": block_reason,
+            "can_leave": is_joined and timezone.now() <= match.start_time - LEAVE_DEADLINE,
+            "can_chat": can_use_chat(match, user),
+        })
         return context
     
 # ---------- Organizer views ----------
@@ -198,19 +214,12 @@ class RemovePlayerView(OrganizerRequiredMixin, View):
     http_method_names = ["post"]
 
     def post(self, request, pk):
-        participation = get_object_or_404(
-            Participation.objects.select_related("match", "player"),
-            pk=pk,
-            match__organizer=request.user,
-        )
-        match = participation.match
-        username = participation.player.username
+        try:
+            player, match = remove_player(pk, request.user)
+        except Participation.DoesNotExist:
+            raise Http404("This player is not in one of your matches.")
 
-        participation.delete()
-        match.refresh_status()
-        match.save(update_fields=["status"])
-
-        messages.success(request, f"{username} was removed from the match.")
+        messages.success(request, f"{player.username} was removed and can't rejoin this match.")
         return redirect("match_detail", pk=match.pk)
     
 # ---------- Player views ----------
@@ -266,3 +275,70 @@ class JoinedMatchesView(LoginRequiredMixin, ListView):
         context["upcoming"] = upcoming
         context["past"] = list(reversed(past))
         return context
+    
+# ---------- Team chat ----------
+
+CHAT_MESSAGE_MAX_LENGTH = 1000
+CHAT_HISTORY_LIMIT = 100
+
+
+def serialize_message(message, user, match):
+    return {
+        "id": message.id,
+        "author": message.author.username,
+        "is_me": message.author_id == user.id,
+        "is_organizer": message.author_id == match.organizer_id,
+        "body": message.body,
+        "time": timezone.localtime(message.created_at).strftime("%d %b, %H:%M"),
+    }
+
+
+class MatchChatView(LoginRequiredMixin, View):
+    """GET returns messages newer than ?after=<id>. POST sends a message. Team members only."""
+
+    http_method_names = ["get", "post"]
+
+    def _get_match(self, request, pk):
+        match = get_object_or_404(Match, pk=pk)
+        if not can_use_chat(match, request.user):
+            denied = JsonResponse(
+                {"error": "Only the organizer and players in this match can use the chat."},
+                status=403,
+            )
+            return match, denied
+        return match, None
+
+    def get(self, request, pk):
+        match, denied = self._get_match(request, pk)
+        if denied:
+            return denied
+
+        after = request.GET.get("after", "")
+        chat_messages = match.messages.select_related("author")
+
+        if after.isdigit() and int(after) > 0:
+            chat_messages = list(chat_messages.filter(id__gt=int(after)).order_by("id"))
+        else:
+            # First load: the latest messages, oldest first
+            chat_messages = list(chat_messages.order_by("-id")[:CHAT_HISTORY_LIMIT])[::-1]
+
+        return JsonResponse({
+            "messages": [serialize_message(message, request.user, match) for message in chat_messages],
+        })
+
+    def post(self, request, pk):
+        match, denied = self._get_match(request, pk)
+        if denied:
+            return denied
+
+        body = request.POST.get("body", "").strip()
+        if not body:
+            return JsonResponse({"error": "Write a message first."}, status=400)
+        if len(body) > CHAT_MESSAGE_MAX_LENGTH:
+            return JsonResponse(
+                {"error": f"Messages can be up to {CHAT_MESSAGE_MAX_LENGTH} characters."},
+                status=400,
+            )
+
+        message = ChatMessage.objects.create(match=match, author=request.user, body=body)
+        return JsonResponse({"message": serialize_message(message, request.user, match)}, status=201)

@@ -11,6 +11,7 @@ urlpatterns = [
     # Players (any logged-in user)
     path("matches/<int:pk>/join/", views.JoinMatchView.as_view(), name="match_join"),
     path("matches/<int:pk>/leave/", views.LeaveMatchView.as_view(), name="match_leave"),
+    path("matches/<int:pk>/chat/", views.MatchChatView.as_view(), name="match_chat"),
     path("joined/", views.JoinedMatchesView.as_view(), name="joined_matches"),
 
     # Organizer

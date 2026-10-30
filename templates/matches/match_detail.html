@@ -83,7 +83,7 @@
             </span>
             {% if user == match.organizer and not match.has_started %}
               <form method="post" action="{% url 'participation_remove' participation.pk %}"
-                    onsubmit="return confirm('Remove {{ participation.player.username|escapejs }} from this match?');">
+                    onsubmit="return confirm('Remove {{ participation.player.username|escapejs }}? They will not be able to rejoin this match.');">
                 {% csrf_token %}
                 <button type="submit" class="btn-remove">Remove</button>
               </form>
@@ -105,7 +105,7 @@
         <p class="lineup__note lineup__note--joined">You have a spot in this match.</p>
         {% if can_leave %}
           <form method="post" action="{% url 'match_leave' match.pk %}"
-                onsubmit="return confirm('Give up your spot in this match?');">
+                onsubmit="return confirm('Give up your spot? You will have to wait 1 hour before you can rejoin this match.');">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline-light w-100 mt-3">Leave match</button>
           </form>
@@ -125,12 +125,35 @@
           <a href="{% url 'login' %}?next={{ request.path|urlencode }}" class="btn btn-floodlight w-100">Log in to join</a>
         {% endif %}
 
+      {% elif join_block_reason %}
+        <button class="btn btn-floodlight w-100" disabled>Join match</button>
+        <p class="lineup__note small mt-2">{{ join_block_reason }}</p>
+
       {% else %}
         <button class="btn btn-floodlight w-100" disabled>
           {% if match.status == "cancelled" %}Match cancelled{% elif match.has_started %}Match started{% else %}Match full{% endif %}
         </button>
       {% endif %}
     </aside>
+
+    {% if can_chat %}
+      <section class="chat" id="chat" data-url="{% url 'match_chat' match.pk %}" aria-labelledby="chat-title">
+        <h2 class="chat__title" id="chat-title">Team chat</h2>
+        <div class="chat__messages" id="chat-messages" aria-live="polite">
+          <p class="chat__empty">No messages yet. Share the details: who brings the ball, bibs, where to meet.</p>
+        </div>
+        <form class="chat__form" id="chat-form">
+          {% csrf_token %}
+          <label for="chat-body" class="visually-hidden">Message</label>
+          <textarea id="chat-body" name="body" rows="2" maxlength="1000" class="form-control"
+                    placeholder="Write a message"></textarea>
+          <button type="submit" class="btn btn-success">Send</button>
+        </form>
+        <p class="chat__error" id="chat-error" role="alert"></p>
+      </section>
+    {% elif user.is_authenticated and match.status != "cancelled" %}
+      <p class="chat-locked">Join the match to see the team chat.</p>
+    {% endif %}
   </div>
 </div>
 {% endblock %}
@@ -138,4 +161,5 @@
 {% block extra_js %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="{% static 'js/map.js' %}"></script>
+<script src="{% static 'js/chat.js' %}"></script>
 {% endblock %}
