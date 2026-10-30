@@ -1,23 +1,60 @@
 {% extends "base.html" %}
 
-{% block title %}Sign up · BookMyPitch{% endblock %}
+{% block title %}Sign up | BookMyPitch{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-  <div class="col-md-6 col-lg-5">
-    <div class="card shadow-sm">
-      <div class="card-body p-4">
-        <h1 class="h3 mb-4">Create your account</h1>
-        <form method="post" novalidate>
-          {% csrf_token %}
-          {% include "includes/form_fields.html" %}
-          <button type="submit" class="btn btn-success w-100">Sign up</button>
-        </form>
-        <p class="text-center mt-3 mb-0">
-          Already have an account? <a href="{% url 'login' %}">Log in</a>
-        </p>
-      </div>
-    </div>
+<div class="auth-wrap">
+  <div class="auth-card">
+    <h1>Create your account</h1>
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      {% for error in form.non_field_errors %}
+        <div class="alert alert-danger">{{ error }}</div>
+      {% endfor %}
+
+      <fieldset class="role-picker">
+        <legend>How will you use BookMyPitch?</legend>
+        <div class="role-options">
+          {% for radio in form.role %}
+            <label class="role-option" for="{{ radio.id_for_label }}">
+              {{ radio.tag }}
+              <span class="role-option__title">{{ radio.choice_label }}</span>
+              <span class="role-option__text">
+                {% if radio.data.value == "organizer" %}
+                  Put your pitch on the map and fill the open spots.
+                {% else %}
+                  Find a match nearby and take a spot.
+                {% endif %}
+              </span>
+            </label>
+          {% endfor %}
+        </div>
+        {% for error in form.role.errors %}
+          <div class="text-danger small mt-1">{{ error }}</div>
+        {% endfor %}
+      </fieldset>
+
+      {% for field in form %}
+        {% if field.name != "role" %}
+          <div class="mb-3">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}
+              <div class="form-text">{{ field.help_text|safe }}</div>
+            {% endif %}
+            {% for error in field.errors %}
+              <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endfor %}
+
+      <button type="submit" class="btn btn-success btn-lg w-100">Create account</button>
+    </form>
+
+    <p class="auth-switch">Already have an account? <a href="{% url 'login' %}">Log in</a></p>
   </div>
 </div>
 {% endblock %}
