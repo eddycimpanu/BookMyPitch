@@ -4,6 +4,9 @@ const TILE_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 const REDUCE_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+const DAY_FILTERS = ["today", "tomorrow", "week", "next-week", "all"];
+const DEFAULT_FILTERS = { day: "all", sector: "", open: false };
+
 document.addEventListener("DOMContentLoaded", () => {
   const homeMap = document.getElementById("map");
   if (homeMap) initHomeMap(homeMap);
@@ -68,12 +71,15 @@ function pitchIcon(openSpots) {
   });
 }
 
-/* ---------- Home page: map + list ---------- */
+/* ---------- Home page: filters, map and list ---------- */
 
 async function initHomeMap(element) {
   const map = createBaseMap(element, BUCHAREST_CENTER, 12);
+  const markerLayer = L.layerGroup().addTo(map);
   const list = document.getElementById("match-list");
   const summary = document.getElementById("match-summary");
+  const form = document.getElementById("filters");
+  const clearButton = document.getElementById("clear-filters");
 
   let data;
   try {
@@ -83,49 +89,159 @@ async function initHomeMap(element) {
   } catch (error) {
     console.error("Could not load pitches:", error);
     summary.textContent = "Matches could not be loaded. Refresh the page to try again.";
+    form.hidden = true;
     list.replaceChildren();
     return;
   }
 
-  if (data.pitches.length === 0) {
+  // Every match together with its pitch, sorted by kick-off
+  const allMatches = data.pitches
+    .flatMap((pitch) => pitch.matches.map((match) => ({ ...match, pitch })))
+    .sort((a, b) => a.start_iso.localeCompare(b.start_iso));
+
+  if (allMatches.length === 0) {
     summary.textContent = "No upcoming matches yet.";
+    form.hidden = true;
     list.replaceChildren(el("p", "list-message", "When an organizer schedules a match, it will show up here."));
     return;
   }
 
-  // Markers: one per pitch, showing the total number of open spots
-  const markers = new Map();
-  data.pitches.forEach((pitch) => {
-    const openSpots = pitch.matches.reduce((sum, match) => sum + match.spots_left, 0);
-    const marker = L.marker([pitch.lat, pitch.lng], { icon: pitchIcon(openSpots), title: pitch.name })
-      .bindPopup(buildPopup(pitch), { maxWidth: 300 })
-      .addTo(map);
-    markers.set(pitch.id, marker);
+  let filters = readFiltersFromUrl();
+  let markers = new Map();
+  writeFiltersToForm(form, filters);
+
+  function render(animate) {
+    const visible = allMatches.filter((match) => matchesFilters(match, filters));
+    const filtered = isFiltered(filters);
+
+    renderSummary(summary, visible, allMatches.length, filtered);
+    renderList(list, visible, (match) => focusPitch(map, element, markers.get(match.pitch.id)));
+    markers = renderMarkers(markerLayer, visible);
+    clearButton.hidden = !filtered;
+
+    // Move the map so all remaining pitches are in view
+    if (markers.size > 0) {
+      const bounds = L.featureGroup([...markers.values()]).getBounds().pad(0.2);
+      map.fitBounds(bounds, { maxZoom: 14, animate: animate && !REDUCE_MOTION });
+    }
+  }
+
+  function update(newFilters) {
+    filters = newFilters;
+    writeFiltersToUrl(filters);
+    render(true);
+  }
+
+  form.addEventListener("change", () => update(readFiltersFromForm(form)));
+  form.addEventListener("submit", (event) => event.preventDefault());
+  clearButton.addEventListener("click", () => {
+    writeFiltersToForm(form, DEFAULT_FILTERS);
+    update({ ...DEFAULT_FILTERS });
   });
 
-  const group = L.featureGroup([...markers.values()]);
-  map.fitBounds(group.getBounds().pad(0.2), { maxZoom: 14 });
+  render(false);
+}
 
-  // List: every match, sorted by start time and grouped by day
-  const matches = data.pitches
-    .flatMap((pitch) => pitch.matches.map((match) => ({ ...match, pitch })))
-    .sort((a, b) => a.start_iso.localeCompare(b.start_iso));
+/* ---------- Filters ---------- */
+function matchesFilters(match, filters) {
+  if (filters.day === "today" && !match.is_today) return false;
+  if (filters.day === "tomorrow" && !match.is_tomorrow) return false;
+  if (filters.day === "week" && !match.is_this_week) return false;
+  if (filters.day === "next-week" && !match.is_next_week) return false;
+  if (filters.sector && String(match.pitch.sector_id) !== filters.sector) return false;
+  if (filters.open && match.spots_left === 0) return false;
+  return true;
+}
 
-  const totalOpen = matches.reduce((sum, match) => sum + match.spots_left, 0);
-  summary.textContent =
-    `${matches.length} upcoming ${matches.length === 1 ? "match" : "matches"}, ` +
-    `${totalOpen} open ${totalOpen === 1 ? "spot" : "spots"}`;
+function isFiltered(filters) {
+  return filters.day !== "all" || filters.sector !== "" || filters.open;
+}
 
+function readFiltersFromForm(form) {
+  return {
+    day: form.elements.day.value || "all",
+    sector: form.elements.sector.value,
+    open: form.elements.open.checked,
+  };
+}
+
+function writeFiltersToForm(form, filters) {
+  form.elements.day.value = filters.day;
+  form.elements.sector.value = filters.sector;
+  form.elements.open.checked = filters.open;
+}
+
+// Filters live in the URL (e.g. /?day=weekend&sector=3),
+// so a filtered view survives a refresh and can be shared as a link.
+function readFiltersFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const day = params.get("day");
+  const sector = params.get("sector") || "";
+  return {
+    day: DAY_FILTERS.includes(day) ? day : "all",
+    sector: /^[1-7]$/.test(sector) ? sector : "",
+    open: params.get("open") === "1",
+  };
+}
+
+function writeFiltersToUrl(filters) {
+  const params = new URLSearchParams();
+  if (filters.day !== "all") params.set("day", filters.day);
+  if (filters.sector) params.set("sector", filters.sector);
+  if (filters.open) params.set("open", "1");
+  const query = params.toString();
+  history.replaceState(null, "", query ? `?${query}` : window.location.pathname);
+}
+
+/* ---------- Rendering ---------- */
+
+function renderSummary(summary, visible, total, filtered) {
+  const openSpots = visible.reduce((sum, match) => sum + match.spots_left, 0);
+  const matchWord = total === 1 ? "match" : "matches";
+  const spotWord = openSpots === 1 ? "spot" : "spots";
+  summary.textContent = filtered
+    ? `${visible.length} of ${total} upcoming ${matchWord}, ${openSpots} open ${spotWord}`
+    : `${total} upcoming ${matchWord}, ${openSpots} open ${spotWord}`;
+}
+
+function renderList(list, matches, onSelect) {
   list.replaceChildren();
-  let currentDay = null;
 
+  if (matches.length === 0) {
+    list.appendChild(el("p", "list-message", "No matches fit these filters. Try another day or sector."));
+    return;
+  }
+
+  let currentDay = null;
   matches.forEach((match) => {
     if (match.day !== currentDay) {
       currentDay = match.day;
       list.appendChild(el("h2", "list-day", match.day));
     }
-    list.appendChild(buildListItem(match, () => focusPitch(map, element, markers.get(match.pitch.id))));
+    list.appendChild(buildListItem(match, () => onSelect(match)));
   });
+}
+
+// One marker per pitch, counting only the matches that pass the filters
+function renderMarkers(layer, matches) {
+  layer.clearLayers();
+
+  const byPitch = new Map();
+  matches.forEach((match) => {
+    if (!byPitch.has(match.pitch.id)) byPitch.set(match.pitch.id, { pitch: match.pitch, matches: [] });
+    byPitch.get(match.pitch.id).matches.push(match);
+  });
+
+  const markers = new Map();
+  byPitch.forEach(({ pitch, matches: pitchMatches }) => {
+    const openSpots = pitchMatches.reduce((sum, match) => sum + match.spots_left, 0);
+    const marker = L.marker([pitch.lat, pitch.lng], { icon: pitchIcon(openSpots), title: pitch.name })
+      .bindPopup(buildPopup(pitch, pitchMatches), { maxWidth: 300 });
+    layer.addLayer(marker);
+    markers.set(pitch.id, marker);
+  });
+
+  return markers;
 }
 
 function buildListItem(match, onSelect) {
@@ -146,6 +262,8 @@ function buildListItem(match, onSelect) {
 }
 
 function focusPitch(map, mapElement, marker) {
+  if (!marker) return;
+
   if (REDUCE_MOTION) {
     map.setView(marker.getLatLng(), 15);
   } else {
@@ -159,12 +277,12 @@ function focusPitch(map, mapElement, marker) {
   }
 }
 
-function buildPopup(pitch) {
+function buildPopup(pitch, matches) {
   const box = el("div");
   box.appendChild(el("h3", "popup__title", pitch.name));
   box.appendChild(el("p", "popup__address", `${pitch.address}, ${pitch.sector}`));
 
-  pitch.matches.forEach((match) => {
+  matches.forEach((match) => {
     const row = el("div", "popup__match");
     const info = el("div");
     info.appendChild(el("div", "popup__when", `${match.day}, ${match.time}`));

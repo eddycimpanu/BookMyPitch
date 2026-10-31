@@ -35,12 +35,11 @@ def day_label(value):
     return f"{day:%A} {day.day} {day:%B}"
 
 
-def weekend_dates(today):
-    """The coming Saturday and Sunday. If today is Sunday, only today."""
-    if today.weekday() == 6:
-        return {today}
-    saturday = today + timedelta(days=5 - today.weekday())
-    return {saturday, saturday + timedelta(days=1)}
+def week_ranges(today):
+    """(start, end) of the rest of this week and of next week. Weeks run Monday to Sunday."""
+    sunday = today + timedelta(days=6 - today.weekday())
+    next_monday = sunday + timedelta(days=1)
+    return (today, sunday), (next_monday, next_monday + timedelta(days=6))
 
 
 class HomeView(TemplateView):
@@ -57,7 +56,7 @@ def pitches_api(request):
     now = timezone.now()
     today = timezone.localdate()
     tomorrow = today + timedelta(days=1)
-    weekend = weekend_dates(today)
+    (week_start, week_end), (next_week_start, next_week_end) = week_ranges(today)
     visible_statuses = [Match.Status.ACTIVE, Match.Status.FULL]
 
     upcoming_matches = (
@@ -87,7 +86,8 @@ def pitches_api(request):
                 "time": timezone.localtime(match.start_time).strftime("%H:%M"),
                 "is_today": match_day == today,
                 "is_tomorrow": match_day == tomorrow,
-                "is_weekend": match_day in weekend,
+                "is_this_week": week_start <= match_day <= week_end,
+                "is_next_week": next_week_start <= match_day <= next_week_end,
                 "spots_needed": match.spots_needed,
                 "spots_taken": min(match.taken, match.spots_needed),
                 "spots_left": max(match.spots_needed - match.taken, 0),

@@ -8,8 +8,39 @@
 {% block content %}
 <header class="finder-header">
   <h1>Matches in Bucharest</h1>
-  <p class="finder-summary" id="match-summary">Loading matches...</p>
+  <p class="finder-summary" id="match-summary" aria-live="polite">Loading matches...</p>
 </header>
+
+<form id="filters" class="filters" aria-label="Filter matches">
+  <fieldset class="day-picker">
+    <legend class="visually-hidden">When</legend>
+    <input type="radio" class="btn-check" name="day" id="day-today" value="today">
+    <label class="day-option" for="day-today">Today</label>
+    <input type="radio" class="btn-check" name="day" id="day-tomorrow" value="tomorrow">
+    <label class="day-option" for="day-tomorrow">Tomorrow</label>
+    <input type="radio" class="btn-check" name="day" id="day-week" value="week">
+    <label class="day-option" for="day-week">This week</label>
+    <input type="radio" class="btn-check" name="day" id="day-next-week" value="next-week">
+    <label class="day-option" for="day-next-week">Next week</label>
+    <input type="radio" class="btn-check" name="day" id="day-all" value="all" checked>
+    <label class="day-option" for="day-all">Any day</label>
+  </fieldset>
+
+  <label class="visually-hidden" for="filter-sector">Sector</label>
+  <select id="filter-sector" name="sector" class="form-select filter-select">
+    <option value="">All sectors</option>
+    {% for value, label in sectors %}
+      <option value="{{ value }}">{{ label }}</option>
+    {% endfor %}
+  </select>
+
+  <div class="form-check form-switch filter-switch">
+    <input class="form-check-input" type="checkbox" role="switch" id="filter-open" name="open">
+    <label class="form-check-label" for="filter-open">Only with open spots</label>
+  </div>
+
+  <button type="button" id="clear-filters" class="btn btn-link filter-clear" hidden>Clear filters</button>
+</form>
 
 <div class="finder">
   <div class="finder__map pitch-frame">
