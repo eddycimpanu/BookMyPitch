@@ -35,13 +35,29 @@ def day_label(value):
     return f"{day:%A} {day.day} {day:%B}"
 
 
+def weekend_dates(today):
+    """The coming Saturday and Sunday. If today is Sunday, only today."""
+    if today.weekday() == 6:
+        return {today}
+    saturday = today + timedelta(days=5 - today.weekday())
+    return {saturday, saturday + timedelta(days=1)}
+
+
 class HomeView(TemplateView):
     template_name = "home.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["sectors"] = Pitch.Sector.choices
+        return context
 
 
 def pitches_api(request):
     """Return pitches that have upcoming, non-cancelled matches, as JSON for the map."""
     now = timezone.now()
+    today = timezone.localdate()
+    tomorrow = today + timedelta(days=1)
+    weekend = weekend_dates(today)
     visible_statuses = [Match.Status.ACTIVE, Match.Status.FULL]
 
     upcoming_matches = (
@@ -61,27 +77,33 @@ def pitches_api(request):
 
     data = []
     for pitch in pitches:
+        matches = []
+        for match in pitch.upcoming_matches:
+            match_day = timezone.localdate(match.start_time)
+            matches.append({
+                "id": match.id,
+                "start_iso": match.start_time.isoformat(),
+                "day": day_label(match.start_time),
+                "time": timezone.localtime(match.start_time).strftime("%H:%M"),
+                "is_today": match_day == today,
+                "is_tomorrow": match_day == tomorrow,
+                "is_weekend": match_day in weekend,
+                "spots_needed": match.spots_needed,
+                "spots_taken": min(match.taken, match.spots_needed),
+                "spots_left": max(match.spots_needed - match.taken, 0),
+                "price": str(match.price_per_player),
+                "url": reverse("match_detail", args=[match.pk]),
+            })
+
         data.append({
             "id": pitch.id,
             "name": pitch.name,
             "address": pitch.address,
             "sector": pitch.get_sector_display(),
+            "sector_id": pitch.sector,
             "lat": float(pitch.latitude),
             "lng": float(pitch.longitude),
-            "matches": [
-                {
-                    "id": match.id,
-                    "start_iso": match.start_time.isoformat(),
-                    "day": day_label(match.start_time),
-                    "time": timezone.localtime(match.start_time).strftime("%H:%M"),
-                    "spots_needed": match.spots_needed,
-                    "spots_taken": min(match.taken, match.spots_needed),
-                    "spots_left": max(match.spots_needed - match.taken, 0),
-                    "price": str(match.price_per_player),
-                    "url": reverse("match_detail", args=[match.pk]),
-                }
-                for match in pitch.upcoming_matches
-            ],
+            "matches": matches,
         })
 
     return JsonResponse({"pitches": data})
