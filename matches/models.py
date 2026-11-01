@@ -7,8 +7,24 @@ from django.db import models
 from django.utils import timezone
 
 
+def minutes_label(minutes):
+    """540 -> '09:00', 1440 -> '24:00'."""
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
+# Every half hour from 00:00 to 24:00, stored as minutes after midnight
+HALF_HOURS = [(minutes, minutes_label(minutes)) for minutes in range(0, 24 * 60 + 1, 30)]
+
+
+# ---------- Pitches ----------
+
+
 class Pitch(models.Model):
-    """A synthetic football pitch, placed on the map by an organizer."""
+    """A synthetic football pitch on the map.
+
+    Added either by an organizer (just a place to play) or by its owner
+    (bookable by the hour, with a price and weekly opening hours).
+    """
 
     class Sector(models.IntegerChoices):
         SECTOR_1 = 1, "Sector 1"
@@ -43,12 +59,85 @@ class Pitch(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # Set only for pitches listed by their owner. Those can be booked by the hour.
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="owned_pitches",
+    )
+    price_per_hour = models.DecimalField(
+        max_digits=7,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        help_text="In RON.",
+    )
+
     class Meta:
         ordering = ["name"]
         verbose_name_plural = "pitches"
 
     def __str__(self):
         return f"{self.name} ({self.get_sector_display()})"
+
+    @property
+    def is_bookable(self):
+        return self.owner_id is not None
+
+
+class OpeningHours(models.Model):
+    """When a bookable pitch is open on one day of the week."""
+
+    class Weekday(models.IntegerChoices):
+        MONDAY = 0, "Monday"
+        TUESDAY = 1, "Tuesday"
+        WEDNESDAY = 2, "Wednesday"
+        THURSDAY = 3, "Thursday"
+        FRIDAY = 4, "Friday"
+        SATURDAY = 5, "Saturday"
+        SUNDAY = 6, "Sunday"
+
+    pitch = models.ForeignKey(Pitch, on_delete=models.CASCADE, related_name="opening_hours")
+    weekday = models.PositiveSmallIntegerField(choices=Weekday.choices)
+    opens_at = models.PositiveSmallIntegerField(
+        choices=HALF_HOURS,
+        help_text="Minutes after midnight.",
+    )
+    closes_at = models.PositiveSmallIntegerField(
+        choices=HALF_HOURS,
+        help_text="Minutes after midnight. 1440 means midnight.",
+    )
+
+    class Meta:
+        ordering = ["weekday"]
+        verbose_name_plural = "opening hours"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["pitch", "weekday"],
+                name="one_opening_hours_per_day",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(closes_at__gt=models.F("opens_at")),
+                name="opening_hours_close_after_open",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.pitch.name}: {self.get_weekday_display()} {self.opens_label}–{self.closes_label}"
+
+    @property
+    def opens_label(self):
+        return minutes_label(self.opens_at)
+
+    @property
+    def closes_label(self):
+        return minutes_label(self.closes_at)
+
+
+# ---------- Matches ----------
 
 
 class Match(models.Model):
@@ -116,19 +205,8 @@ class Match(models.Model):
         local_start = timezone.localtime(self.start_time)
         return f"{self.pitch.name} – {local_start:%d %b %Y, %H:%M}"
 
+    # Spots
 
-    @property
-    def spot_states(self):
-        """One boolean per spot (True = taken). Used to draw the spot dots in templates."""
-        taken = min(self.spots_taken, self.spots_needed)
-        return [True] * taken + [False] * (self.spots_needed - taken)
-
-    def refresh_status(self):
-        """Keep status in sync with the number of players. Cancelled matches stay cancelled."""
-        if self.status == self.Status.CANCELLED:
-            return
-        self.status = self.Status.FULL if self.is_full else self.Status.ACTIVE
-        
     @property
     def spots_taken(self):
         return self.participations.count()
@@ -142,12 +220,28 @@ class Match(models.Model):
         return self.spots_left == 0
 
     @property
+    def spot_states(self):
+        """One boolean per spot (True = taken). Used to draw the spot dots in templates."""
+        taken = min(self.spots_taken, self.spots_needed)
+        return [True] * taken + [False] * (self.spots_needed - taken)
+
+    # Time
+
+    @property
     def end_time(self):
         return self.start_time + timedelta(minutes=self.duration_minutes)
 
     @property
     def has_started(self):
         return self.start_time <= timezone.now()
+
+    # Status
+
+    def refresh_status(self):
+        """Keep status in sync with the number of players. Cancelled matches stay cancelled."""
+        if self.status == self.Status.CANCELLED:
+            return
+        self.status = self.Status.FULL if self.is_full else self.Status.ACTIVE
 
 
 class Participation(models.Model):
@@ -172,7 +266,8 @@ class Participation(models.Model):
 
     def __str__(self):
         return f"{self.player} → {self.match}"
-    
+
+
 class MatchExit(models.Model):
     """Records when a player left a match or was removed by the organizer.
 
@@ -198,6 +293,9 @@ class MatchExit(models.Model):
 
     def __str__(self):
         return f"{self.player} {self.get_reason_display().lower()} ({self.match})"
+
+
+# ---------- Team chat ----------
 
 
 class ChatMessage(models.Model):

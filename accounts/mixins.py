@@ -10,3 +10,10 @@ class OrganizerRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
 
     def test_func(self):
         return self.request.user.is_organizer
+
+
+class OwnerRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
+    """Allows access only to logged-in pitch owners. Everyone else gets 403 (or the login page)."""
+
+    def test_func(self):
+        return self.request.user.is_owner

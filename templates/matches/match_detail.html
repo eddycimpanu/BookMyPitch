@@ -13,7 +13,7 @@
 <div class="row g-4 mt-1">
   <div class="col-lg-7">
     <header class="match-hero">
-      <h1>{{ match.pitch.name }}</h1>
+      <h1><a href="{% url 'pitch_detail' match.pitch.pk %}" class="pitch-link">{{ match.pitch.name }}</a></h1>
       <p class="match-address">{{ match.pitch.address }}, {{ match.pitch.get_sector_display }}</p>
     </header>
 

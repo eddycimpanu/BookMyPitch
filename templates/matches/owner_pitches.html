@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}My pitches | BookMyPitch{% endblock %}
+
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>My pitches</h1>
+    <p class="text-muted mb-0">Pitches you list for booking.</p>
+  </div>
+  <a href="{% url 'owner_pitch_create' %}" class="btn btn-success">List a pitch</a>
+</header>
+
+{% if pitches %}
+  <div class="organizer-list">
+    {% for pitch in pitches %}
+      <article class="organizer-match">
+        <div class="organizer-match__when">
+          <span class="organizer-match__day">Per hour</span>
+          <span class="organizer-match__time">
+            {{ pitch.price_per_hour|floatformat:"-2" }} <span class="price-tag">RON</span>
+          </span>
+        </div>
+
+        <div>
+          <h3 class="organizer-match__pitch">
+            <a href="{% url 'pitch_detail' pitch.pk %}">{{ pitch.name }}</a>
+          </h3>
+          <p class="organizer-match__players">{{ pitch.address }}, {{ pitch.get_sector_display }}</p>
+          <p class="organizer-match__players">
+            {% for hours in pitch.opening_hours.all %}{{ hours.get_weekday_display|slice:":3" }} {{ hours.opens_label }}–{{ hours.closes_label }}{% if not forloop.last %}, {% endif %}{% empty %}No opening hours set{% endfor %}
+          </p>
+        </div>
+
+        <div class="organizer-match__actions">
+          <a href="{% url 'owner_pitch_update' pitch.pk %}" class="btn btn-outline-secondary btn-sm">Edit</a>
+          <a href="{% url 'pitch_detail' pitch.pk %}" class="btn btn-outline-secondary btn-sm">View</a>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">
+    <p>You haven't listed a pitch yet.</p>
+    <a href="{% url 'owner_pitch_create' %}" class="btn btn-success">List your first pitch</a>
+  </div>
+{% endif %}
+{% endblock %}

@@ -1,6 +1,7 @@
 from django.contrib import admin
 
-from .models import ChatMessage, Match, MatchExit, Participation, Pitch
+from .models import ChatMessage, Match, MatchExit, OpeningHours, Participation, Pitch
+
 
 class ParticipationInline(admin.TabularInline):
     model = Participation
@@ -8,11 +9,17 @@ class ParticipationInline(admin.TabularInline):
     readonly_fields = ("joined_at",)
 
 
+class OpeningHoursInline(admin.TabularInline):
+    model = OpeningHours
+    extra = 0
+
+
 @admin.register(Pitch)
 class PitchAdmin(admin.ModelAdmin):
-    list_display = ("name", "sector", "address", "created_by")
+    list_display = ("name", "sector", "address", "owner", "price_per_hour", "created_by")
     list_filter = ("sector",)
     search_fields = ("name", "address")
+    inlines = [OpeningHoursInline]
 
 
 @admin.register(Match)
@@ -28,8 +35,8 @@ class MatchAdmin(admin.ModelAdmin):
 class ParticipationAdmin(admin.ModelAdmin):
     list_display = ("player", "match", "joined_at")
     search_fields = ("player__username", "match__pitch__name")
-    
-    
+
+
 @admin.register(MatchExit)
 class MatchExitAdmin(admin.ModelAdmin):
     list_display = ("player", "match", "reason", "created_at")

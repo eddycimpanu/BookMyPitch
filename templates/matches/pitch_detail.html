@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% load static l10n %}
+
+{% block title %}{{ pitch.name }} | BookMyPitch{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'home' %}" class="back-link">Back to map</a>
+
+<div class="row g-4 mt-1">
+  <div class="col-lg-7">
+    <header class="match-hero">
+      <h1>{{ pitch.name }}</h1>
+      <p class="match-address">{{ pitch.address }}, {{ pitch.get_sector_display }}</p>
+    </header>
+
+    {% if user == pitch.owner %}
+      <div class="organizer-tools">
+        <a href="{% url 'owner_pitch_update' pitch.pk %}" class="btn btn-outline-secondary">Edit pitch and hours</a>
+      </div>
+    {% endif %}
+
+    {% if pitch.is_bookable %}
+      <div class="match-facts">
+        <div class="fact">
+          <span class="fact__label">Price per hour</span>
+          <span class="fact__value">{{ pitch.price_per_hour|floatformat:"-2" }} RON</span>
+        </div>
+        <div class="fact">
+          <span class="fact__label">Listed by</span>
+          <span class="fact__value">{{ pitch.owner.username }}</span>
+        </div>
+      </div>
+    {% endif %}
+
+    <h2 class="section-title mt-4">Upcoming matches here</h2>
+    {% if upcoming_matches %}
+      <div class="match-list mb-4">
+        {% for match in upcoming_matches %}
+          <a href="{% url 'match_detail' match.pk %}"
+             class="match-item{% if match.is_full %} match-item--full{% elif match.spots_left <= 2 %} match-item--few{% endif %}">
+            <span class="match-item__time">{{ match.start_time|date:"H:i" }}</span>
+            <span class="match-item__body">
+              <span class="match-item__pitch">{{ match.start_time|date:"l j F" }}</span>
+              <span class="match-item__spots">
+                {% include "includes/spot_dots.html" %}
+                <span>{% if match.is_full %}Full{% else %}{{ match.spots_left }} spot{{ match.spots_left|pluralize }} left{% endif %}</span>
+              </span>
+            </span>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-muted mb-4">No upcoming matches on this pitch yet.</p>
+    {% endif %}
+
+    <div id="match-map"
+         data-lat="{{ pitch.latitude|unlocalize }}"
+         data-lng="{{ pitch.longitude|unlocalize }}"
+         role="img"
+         aria-label="Location of {{ pitch.name }}"></div>
+  </div>
+
+  <div class="col-lg-5">
+    <aside class="hours-card">
+      <h2>Opening hours</h2>
+      {% if pitch.is_bookable %}
+        <ul class="hours-list">
+          {% for weekday, name, hours in week %}
+            <li class="hours-list__day{% if weekday == today_weekday %} hours-list__day--today{% endif %}">
+              <span>{{ name }}</span>
+              <span>{% if hours %}{{ hours.opens_label }}–{{ hours.closes_label }}{% else %}Closed{% endif %}</span>
+            </li>
+          {% endfor %}
+        </ul>
+        <button class="btn btn-floodlight w-100" disabled>Book an hour (available soon)</button>
+      {% else %}
+        <p class="text-muted mb-0">An organizer added this pitch, so it can't be booked through BookMyPitch.</p>
+      {% endif %}
+    </aside>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{% static 'js/map.js' %}"></script>
+{% endblock %}

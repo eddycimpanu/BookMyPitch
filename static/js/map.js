@@ -306,7 +306,9 @@ function buildPopup(pitch, matches) {
 function initMatchMap(element) {
   const position = [Number(element.dataset.lat), Number(element.dataset.lng)];
   const map = createBaseMap(element, position, 15, false);
-  L.marker(position, { icon: pitchIcon(Number(element.dataset.spotsLeft)) }).addTo(map);
+  const hasSpots = element.dataset.spotsLeft !== undefined;
+  const options = hasSpots ? { icon: pitchIcon(Number(element.dataset.spotsLeft)) } : {};
+  L.marker(position, options).addTo(map);
 }
 
 /* ---------- Add pitch: click the map to set the location ---------- */

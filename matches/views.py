@@ -2,18 +2,19 @@ from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db import transaction
 from django.db.models import Count, Prefetch
 from django.http import Http404, JsonResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
-from accounts.mixins import OrganizerRequiredMixin
+from accounts.mixins import OrganizerRequiredMixin, OwnerRequiredMixin
 
-from .forms import MatchForm, PitchForm
-from .models import ChatMessage, Match, Participation, Pitch
+from .forms import MatchForm, OwnerPitchForm, PitchForm, WeeklyHoursForm
+from .models import ChatMessage, Match, OpeningHours, Participation, Pitch
 from .services import (
     LEAVE_DEADLINE,
     MatchActionError,
@@ -23,6 +24,7 @@ from .services import (
     rejoin_block_reason,
     remove_player,
 )
+
 
 def day_label(value):
     """Return 'Today', 'Tomorrow' or a date like 'Saturday 1 November', in local time."""
@@ -364,3 +366,81 @@ class MatchChatView(LoginRequiredMixin, View):
 
         message = ChatMessage.objects.create(match=match, author=request.user, body=body)
         return JsonResponse({"message": serialize_message(message, request.user, match)}, status=201)
+
+
+# ---------- Pitch owners ----------
+
+
+class PitchDetailView(DetailView):
+    model = Pitch
+    template_name = "matches/pitch_detail.html"
+    context_object_name = "pitch"
+
+    def get_queryset(self):
+        return Pitch.objects.select_related("owner").prefetch_related("opening_hours")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        pitch = self.object
+        hours_by_day = {hours.weekday: hours for hours in pitch.opening_hours.all()}
+
+        context["week"] = [
+            (weekday, name, hours_by_day.get(weekday)) for weekday, name in OpeningHours.Weekday.choices
+        ]
+        context["today_weekday"] = timezone.localdate().weekday()
+        context["upcoming_matches"] = (
+            pitch.matches.filter(start_time__gt=timezone.now())
+            .exclude(status=Match.Status.CANCELLED)
+            .order_by("start_time")[:10]
+        )
+        return context
+
+
+class OwnerPitchListView(OwnerRequiredMixin, ListView):
+    template_name = "matches/owner_pitches.html"
+    context_object_name = "pitches"
+
+    def get_queryset(self):
+        return Pitch.objects.filter(owner=self.request.user).prefetch_related("opening_hours")
+
+
+class OwnerPitchFormView(OwnerRequiredMixin, View):
+    """List a new bookable pitch, or edit one you own: location, details, price and weekly hours."""
+
+    template_name = "matches/owner_pitch_form.html"
+
+    def get_pitch(self):
+        if "pk" not in self.kwargs:
+            return None
+        # Only your own pitches. Anything else returns 404.
+        return get_object_or_404(Pitch, pk=self.kwargs["pk"], owner=self.request.user)
+
+    def get(self, request, pk=None):
+        pitch = self.get_pitch()
+        return self.render_forms(OwnerPitchForm(instance=pitch), WeeklyHoursForm(pitch=pitch), pitch)
+
+    def post(self, request, pk=None):
+        pitch = self.get_pitch()
+        pitch_form = OwnerPitchForm(request.POST, instance=pitch)
+        hours_form = WeeklyHoursForm(request.POST, pitch=pitch)
+
+        if not (pitch_form.is_valid() and hours_form.is_valid()):
+            return self.render_forms(pitch_form, hours_form, pitch)
+
+        with transaction.atomic():
+            pitch = pitch_form.save(commit=False)
+            pitch.owner = request.user
+            if pitch.created_by_id is None:
+                pitch.created_by = request.user
+            pitch.save()
+            hours_form.save(pitch)
+
+        messages.success(request, f"{pitch.name} is saved.")
+        return redirect("pitch_detail", pk=pitch.pk)
+
+    def render_forms(self, pitch_form, hours_form, pitch):
+        return render(self.request, self.template_name, {
+            "form": pitch_form,
+            "hours_form": hours_form,
+            "pitch": pitch,
+        })

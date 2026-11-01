@@ -23,7 +23,9 @@
               <span class="role-option__title">{{ radio.choice_label }}</span>
               <span class="role-option__text">
                 {% if radio.data.value == "organizer" %}
-                  Put your pitch on the map and fill the open spots.
+                  Post matches and fill the open spots.
+                {% elif radio.data.value == "owner" %}
+                  List your pitch and let organizers book free hours.
                 {% else %}
                   Find a match nearby and take a spot.
                 {% endif %}
