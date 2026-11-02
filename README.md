@@ -4,23 +4,25 @@
 
 Find and join pickup football matches on synthetic pitches in Bucharest. Pitch owners list their pitches with opening hours, organizers book a free hour and post a match with open spots, and players take a spot and coordinate in a team chat.
 
-![Map of upcoming matches in Bucharest](docs/screenshots/home.png)
+![Map of matches and bookable pitches in Bucharest](docs/screenshots/home.png)
 
 ## Features
 
-- **Interactive map** of upcoming matches, with markers that show open spots and filters by day, sector and availability.
-- **Three roles.** Pitch owners list pitches with a price per hour and weekly opening hours, see who booked them, cancel bookings with a reason and block hours for maintenance. Organizers book a free hour, which creates the match, or add any other pitch by clicking on the map; they can edit and cancel matches and remove players. Players join and leave matches.
-- **Pitch booking without double bookings.** Free hours are worked out from the opening hours and existing bookings, and PostgreSQL itself refuses two overlapping bookings of the same pitch (an exclusion constraint on time ranges).
-- **Safe joining.** The last spot in a match can't be taken twice, even when several players click at the same moment (PostgreSQL row locking with `select_for_update`).
+- **Map of matches and pitches**, with filters by day, sector and open spots.
+- **Three roles:**
+  - **Players** join and leave matches and talk to their team in a private chat.
+  - **Organizers** book a free hour on a listed pitch, which creates the match, or post a match on any pitch they add to the map. They can edit and cancel matches and remove players.
+  - **Pitch owners** list pitches with a price per hour and weekly opening hours, see who booked them, cancel bookings with a reason and block hours for maintenance.
+- **No double bookings.** PostgreSQL itself refuses two overlapping bookings of the same pitch (an exclusion constraint on time ranges).
+- **No overbooked matches.** The last spot can't be taken twice, even when several players click at the same moment (row locking with `select_for_update`).
 - **Fair-play rules.** A 1-hour cooldown before rejoining a match you left, no rejoining after being removed, and leaving closes 2 hours before kick-off.
-- **Private team chat** for the organizer and the players in each match.
-- **75 automated tests**, including concurrency tests for joining and booking, run on every push with GitHub Actions.
+- **75 automated tests**, including concurrency tests, run on every push with GitHub Actions.
 
 ## Screenshots
 
-| Match page | Organizer view |
-| --- | --- |
-| ![Match page with lineup and team chat](docs/screenshots/match.png) | ![Organizer's list of matches](docs/screenshots/organizer.png) |
+| Match page and team chat | Booking a pitch | Owner's bookings |
+| --- | --- | --- |
+| ![Match page with lineup and team chat](docs/screenshots/match.png) | ![Picking a day, duration and start time](docs/screenshots/booking.png) | ![Owner's upcoming bookings and blocked times](docs/screenshots/owner.png) |
 
 ## Tech stack
 
@@ -38,7 +40,7 @@ venv\Scripts\activate          # macOS / Linux: source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Create a PostgreSQL database, copy `.env.example` to `.env` and fill in your values. Then:
+Create a PostgreSQL database owned by your database user (the migrations enable the `btree_gist` extension, and the tests need the `CREATEDB` permission). Copy `.env.example` to `.env` and fill in your values. Then:
 
 ```bash
 python manage.py migrate
@@ -51,7 +53,7 @@ Run the tests with `python manage.py test`.
 ## Project structure
 
 ```
-accounts/    custom user model with organizer and player roles, sign up and log in
+accounts/    custom user model with player, organizer and pitch owner roles, sign up and log in
 matches/     pitches, bookings (bookings.py), matches, joining rules (services.py), team chat, map API, tests
 templates/   Django templates
 static/      styles and map / chat scripts
