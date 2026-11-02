@@ -33,6 +33,7 @@
         </div>
 
         <div class="organizer-match__actions">
+          <a href="{% url 'owner_bookings' %}?pitch={{ pitch.pk }}" class="btn btn-outline-secondary btn-sm">Block time</a>
           <a href="{% url 'owner_pitch_update' pitch.pk %}" class="btn btn-outline-secondary btn-sm">Edit</a>
           <a href="{% url 'pitch_detail' pitch.pk %}" class="btn btn-outline-secondary btn-sm">View</a>
         </div>

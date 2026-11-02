@@ -13,9 +13,26 @@ from django.views.generic import CreateView, DetailView, ListView, TemplateView,
 
 from accounts.mixins import OrganizerRequiredMixin, OwnerRequiredMixin
 
-from .bookings import BookingError, book_pitch, booking_days, booking_price, free_start_times, release_booking
-from .forms import BookedMatchForm, BookingForm, MatchForm, OwnerPitchForm, PitchForm, WeeklyHoursForm
-from .models import ChatMessage, Match, OpeningHours, Participation, Pitch
+from .bookings import (
+    BookingError,
+    block_time,
+    book_pitch,
+    booking_days,
+    booking_price,
+    cancel_booking,
+    free_start_times,
+    release_booking,
+)
+from .forms import (
+    BlockTimeForm,
+    BookedMatchForm,
+    BookingForm,
+    MatchForm,
+    OwnerPitchForm,
+    PitchForm,
+    WeeklyHoursForm,
+)
+from .models import BlockedTime, Booking, ChatMessage, Match, OpeningHours, Participation, Pitch
 from .services import (
     LEAVE_DEADLINE,
     MatchActionError,
@@ -302,7 +319,7 @@ class JoinedMatchesView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         return (
             Match.objects.filter(participations__player=self.request.user)
-            .select_related("pitch", "organizer")
+            .select_related("pitch", "organizer", "booking")
             .prefetch_related("participations")
             .order_by("start_time")
         )
@@ -537,3 +554,96 @@ class BookPitchView(OrganizerRequiredMixin, View):
             "duration_label": Match.Duration(self.duration).label,
             "total_price": booking_price(self.pitch, self.duration),
         })
+
+
+# ---------- Owner panel: bookings and blocked times ----------
+
+
+class OwnerBookingsView(OwnerRequiredMixin, View):
+    """Upcoming bookings on the owner's pitches, grouped by day, plus the times they blocked."""
+
+    template_name = "matches/owner_bookings.html"
+
+    def get(self, request):
+        return self.render_page(BlockTimeForm(owner=request.user, initial=self.form_initial()))
+
+    def post(self, request):
+        # Blocking a time is the only form posted to this page
+        form = BlockTimeForm(request.POST, owner=request.user)
+        if not form.is_valid():
+            return self.render_page(form)
+
+        try:
+            block_time(
+                form.cleaned_data["pitch"].pk,
+                request.user,
+                form.cleaned_data["start_time"],
+                form.cleaned_data["end_time"],
+                form.cleaned_data["reason"],
+            )
+        except BookingError as error:
+            form.add_error(None, str(error))
+            return self.render_page(form)
+
+        messages.success(request, "Time blocked. Organizers can't book it now.")
+        return redirect("owner_bookings")
+
+    def form_initial(self):
+        initial = {"day": timezone.localdate() + timedelta(days=1)}
+        pitch_id = self.request.GET.get("pitch", "")
+        if pitch_id.isdigit():
+            initial["pitch"] = pitch_id
+        return initial
+
+    def render_page(self, form):
+        now = timezone.now()
+        owner = self.request.user
+
+        bookings = (
+            Booking.objects.filter(pitch__owner=owner, status=Booking.Status.CONFIRMED, end_time__gt=now)
+            .select_related("pitch", "match__organizer")
+            .annotate(players=Count("match__participations"))
+            .order_by("start_time")
+        )
+        days = []
+        for booking in bookings:
+            day = timezone.localdate(booking.start_time)
+            if not days or days[-1][0] != day:
+                days.append((day, []))
+            days[-1][1].append(booking)
+
+        return render(self.request, self.template_name, {
+            "days": days,
+            "blocked_times": BlockedTime.objects.filter(pitch__owner=owner, end_time__gt=now).select_related("pitch"),
+            "has_pitches": owner.owned_pitches.exists(),
+            "form": form,
+        })
+
+
+class OwnerCancelBookingView(OwnerRequiredMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        try:
+            booking = cancel_booking(pk, request.user, request.POST.get("reason", "")[:200])
+        except Booking.DoesNotExist:
+            raise Http404("This booking is not on one of your pitches.")
+        except BookingError as error:
+            messages.error(request, str(error))
+        else:
+            local_start = timezone.localtime(booking.start_time)
+            messages.success(
+                request,
+                f"Booking on {local_start:%a %d %b, %H:%M} cancelled. The organizer will see it on the match page.",
+            )
+        return redirect("owner_bookings")
+
+
+class OwnerUnblockTimeView(OwnerRequiredMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        blocked = get_object_or_404(BlockedTime, pk=pk, pitch__owner=request.user)
+        blocked.delete()
+        messages.success(request, "The time is open for bookings again.")
+        return redirect("owner_bookings")

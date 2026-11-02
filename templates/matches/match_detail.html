@@ -18,7 +18,13 @@
     </header>
 
     {% if match.status == "cancelled" %}
-      <div class="alert alert-danger">The organizer cancelled this match.</div>
+      {% if match.booking.cancelled_by_owner %}
+        <div class="alert alert-danger">
+          The pitch owner cancelled the booking, so this match is cancelled{% if match.booking.cancel_reason %}. Reason: {{ match.booking.cancel_reason }}{% else %}.{% endif %}
+        </div>
+      {% else %}
+        <div class="alert alert-danger">The organizer cancelled this match.</div>
+      {% endif %}
     {% elif match.has_started %}
       <div class="alert alert-secondary">This match has already started.</div>
     {% endif %}

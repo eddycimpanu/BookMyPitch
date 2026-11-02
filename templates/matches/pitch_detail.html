@@ -20,6 +20,7 @@
     {% if user == pitch.owner %}
       <div class="organizer-tools">
         <a href="{% url 'owner_pitch_update' pitch.pk %}" class="btn btn-outline-secondary">Edit pitch and hours</a>
+        <a href="{% url 'owner_bookings' %}?pitch={{ pitch.pk }}" class="btn btn-outline-secondary">Bookings and blocked times</a>
       </div>
     {% endif %}
 

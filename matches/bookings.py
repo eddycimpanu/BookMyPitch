@@ -1,4 +1,4 @@
-"""Booking rules for pitches listed by their owner: which times are free, and booking one."""
+"""Booking rules for pitches listed by their owner: free times, booking, cancelling and blocking time."""
 
 from datetime import datetime, time, timedelta
 from decimal import Decimal
@@ -6,7 +6,7 @@ from decimal import Decimal
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from .models import Booking, Match, Pitch
+from .models import BlockedTime, Booking, Match, Pitch
 
 # Bookings start on the hour or on the half hour
 SLOT_STEP_MINUTES = 30
@@ -42,13 +42,7 @@ def free_start_times(pitch, day, duration_minutes, now=None):
 
     day_opens = local_time(day, hours.opens_at)
     day_closes = local_time(day, hours.closes_at)
-    taken = list(
-        pitch.bookings.filter(
-            status=Booking.Status.CONFIRMED,
-            start_time__lt=day_closes,
-            end_time__gt=day_opens,
-        ).values_list("start_time", "end_time")
-    )
+    taken = taken_intervals(pitch, day_opens, day_closes)
     earliest = (now or timezone.now()) + MIN_NOTICE
 
     starts = []
@@ -63,6 +57,14 @@ def free_start_times(pitch, day, duration_minutes, now=None):
             continue
         starts.append(start)
     return starts
+
+
+def taken_intervals(pitch, start, end):
+    """(start, end) of every confirmed booking and blocked time that overlaps the given window."""
+    overlapping = {"start_time__lt": end, "end_time__gt": start}
+    bookings = pitch.bookings.filter(status=Booking.Status.CONFIRMED, **overlapping)
+    blocks = pitch.blocked_times.filter(**overlapping)
+    return list(bookings.values_list("start_time", "end_time")) + list(blocks.values_list("start_time", "end_time"))
 
 
 def booking_price(pitch, duration_minutes):
@@ -107,7 +109,64 @@ def book_pitch(pitch_id, organizer, start_time, duration_minutes, spots_needed, 
 
 
 def release_booking(match):
-    """Cancel the booking of a cancelled match, so its time is free again. Returns True if there was one."""
+    """The organizer cancelled the match: cancel its booking too, so the time is free again.
+
+    Returns True if the match had a booking.
+    """
     return Booking.objects.filter(match=match, status=Booking.Status.CONFIRMED).update(
-        status=Booking.Status.CANCELLED
+        status=Booking.Status.CANCELLED,
+        cancelled_by=match.organizer,
     ) > 0
+
+
+def cancel_booking(booking_id, owner, reason=""):
+    """The pitch owner cancels a booking. The match is cancelled too, and the organizer sees the reason.
+
+    Raises Booking.DoesNotExist if the booking isn't on one of the owner's pitches.
+    """
+    with transaction.atomic():
+        booking = (
+            Booking.objects.select_for_update(of=("self",))
+            .select_related("match")
+            .get(pk=booking_id, pitch__owner=owner)
+        )
+        if booking.status != Booking.Status.CONFIRMED:
+            raise BookingError("This booking is already cancelled.")
+        if booking.start_time <= timezone.now():
+            raise BookingError("This booking has already started, so it can't be cancelled.")
+
+        booking.status = Booking.Status.CANCELLED
+        booking.cancelled_by = owner
+        booking.cancel_reason = reason.strip()
+        booking.save(update_fields=["status", "cancelled_by", "cancel_reason"])
+
+        booking.match.status = Match.Status.CANCELLED
+        booking.match.save(update_fields=["status"])
+
+    return booking
+
+
+def block_time(pitch_id, owner, start_time, end_time, reason=""):
+    """Close the pitch for bookings between two times. Refused if a confirmed booking is in the way.
+
+    Raises Pitch.DoesNotExist if the pitch isn't the owner's.
+    """
+    with transaction.atomic():
+        # Same lock as book_pitch, so a booking and a block can't sneak in at the same moment.
+        # (A database constraint can't compare rows from two different tables, so the lock does that job.)
+        pitch = Pitch.objects.select_for_update().get(pk=pitch_id, owner=owner)
+        if start_time <= timezone.now():
+            raise BookingError("Pick a time in the future.")
+
+        clashes = pitch.bookings.filter(
+            status=Booking.Status.CONFIRMED,
+            start_time__lt=end_time,
+            end_time__gt=start_time,
+        ).count()
+        if clashes:
+            raise BookingError(
+                f"{clashes} booking{'s' if clashes > 1 else ''} already in this time. "
+                "Cancel them first, then block the time."
+            )
+
+        return BlockedTime.objects.create(pitch=pitch, start_time=start_time, end_time=end_time, reason=reason.strip())

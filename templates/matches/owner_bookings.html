@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Bookings | BookMyPitch{% endblock %}
+
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>Bookings</h1>
+    <p class="text-muted mb-0">Who booked your pitches, and the times you closed them.</p>
+  </div>
+</header>
+
+{% if not has_pitches %}
+  <div class="empty-state">
+    <p>List a pitch first. Its bookings will show up here.</p>
+    <a href="{% url 'owner_pitch_create' %}" class="btn btn-success">List a pitch</a>
+  </div>
+{% else %}
+<div class="row g-4">
+  <div class="col-lg-7">
+    <h2 class="section-title">Upcoming</h2>
+
+    {% for day, bookings in days %}
+      <h3 class="list-day">{{ day|date:"l j F" }}</h3>
+      <div class="organizer-list mb-3">
+        {% for booking in bookings %}
+          <article class="booking-row">
+            <div class="booking-row__time">
+              {{ booking.start_time|date:"H:i" }}<span>–{{ booking.end_time|date:"H:i" }}</span>
+            </div>
+
+            <div class="booking-row__body">
+              <h4 class="booking-row__pitch">{{ booking.pitch.name }}</h4>
+              <p class="booking-row__meta">
+                Booked by {{ booking.match.organizer.username }} for
+                <a href="{% url 'match_detail' booking.match.pk %}">a match</a>
+                with {{ booking.players }} of {{ booking.match.spots_needed }} players.
+                {{ booking.price|floatformat:"-2" }} RON for the pitch.
+              </p>
+
+              <details class="booking-cancel">
+                <summary>Cancel booking</summary>
+                <form method="post" action="{% url 'owner_booking_cancel' booking.pk %}"
+                      onsubmit="return confirm('Cancel this booking? The match is cancelled too.');">
+                  {% csrf_token %}
+                  <label class="form-label" for="reason-{{ booking.pk }}">Reason, shown to the organizer and players</label>
+                  <input id="reason-{{ booking.pk }}" name="reason" maxlength="200" class="form-control mb-2"
+                         placeholder="e.g. the pitch is being repaired">
+                  <button type="submit" class="btn btn-outline-danger btn-sm">Cancel this booking</button>
+                </form>
+              </details>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    {% empty %}
+      <div class="empty-state">
+        <p class="mb-0">No upcoming bookings yet. They appear here as soon as an organizer books one of your pitches.</p>
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="col-lg-5">
+    <section class="form-card mb-4" aria-labelledby="block-title">
+      <h2 class="section-title" id="block-title">Block a time</h2>
+      <p class="text-muted small">Close a pitch for maintenance or a private event. Organizers won't be able to book it.</p>
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% for error in form.non_field_errors %}
+          <div class="alert alert-danger">{{ error }}</div>
+        {% endfor %}
+
+        <div class="mb-3">
+          <label class="form-label" for="{{ form.pitch.id_for_label }}">Pitch</label>
+          {{ form.pitch }}
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="{{ form.day.id_for_label }}">Day</label>
+          {{ form.day }}
+          {% for error in form.day.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-label" for="{{ form.starts_at.id_for_label }}">From</label>
+            {{ form.starts_at }}
+          </div>
+          <div class="col-6">
+            <label class="form-label" for="{{ form.ends_at.id_for_label }}">To</label>
+            {{ form.ends_at }}
+          </div>
+          {% for error in form.ends_at.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="{{ form.reason.id_for_label }}">Reason (optional)</label>
+          {{ form.reason }}
+        </div>
+        <button type="submit" class="btn btn-success w-100">Block this time</button>
+      </form>
+    </section>
+
+    <section aria-labelledby="blocked-title">
+      <h2 class="section-title" id="blocked-title">Blocked times</h2>
+      {% if blocked_times %}
+        <ul class="blocked-list">
+          {% for blocked in blocked_times %}
+            <li>
+              <div>
+                <strong>{{ blocked.start_time|date:"D j M, H:i" }}–{{ blocked.end_time|date:"H:i" }}</strong>
+                <div class="text-muted small">{{ blocked.pitch.name }}{% if blocked.reason %}: {{ blocked.reason }}{% endif %}</div>
+              </div>
+              <form method="post" action="{% url 'owner_unblock' blocked.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-secondary btn-sm">Open again</button>
+              </form>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-muted">No blocked times.</p>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

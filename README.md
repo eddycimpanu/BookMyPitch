@@ -9,12 +9,12 @@ Find and join pickup football matches on synthetic pitches in Bucharest. Pitch o
 ## Features
 
 - **Interactive map** of upcoming matches, with markers that show open spots and filters by day, sector and availability.
-- **Three roles.** Pitch owners list pitches with a price per hour and weekly opening hours. Organizers book a free hour, which creates the match, or add any other pitch by clicking on the map; they can edit and cancel matches and remove players. Players join and leave matches.
+- **Three roles.** Pitch owners list pitches with a price per hour and weekly opening hours, see who booked them, cancel bookings with a reason and block hours for maintenance. Organizers book a free hour, which creates the match, or add any other pitch by clicking on the map; they can edit and cancel matches and remove players. Players join and leave matches.
 - **Pitch booking without double bookings.** Free hours are worked out from the opening hours and existing bookings, and PostgreSQL itself refuses two overlapping bookings of the same pitch (an exclusion constraint on time ranges).
 - **Safe joining.** The last spot in a match can't be taken twice, even when several players click at the same moment (PostgreSQL row locking with `select_for_update`).
 - **Fair-play rules.** A 1-hour cooldown before rejoining a match you left, no rejoining after being removed, and leaving closes 2 hours before kick-off.
 - **Private team chat** for the organizer and the players in each match.
-- **65 automated tests**, including concurrency tests for joining and booking, run on every push with GitHub Actions.
+- **75 automated tests**, including concurrency tests for joining and booking, run on every push with GitHub Actions.
 
 ## Screenshots
 

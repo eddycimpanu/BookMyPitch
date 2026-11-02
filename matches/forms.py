@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from accounts.forms import BootstrapFormMixin
 
+from .bookings import local_time
 from .models import HALF_HOURS, Match, OpeningHours, Pitch
 
 # Same area as the validators on the Pitch model: Bucharest + Ilfov
@@ -228,3 +229,34 @@ class BookingForm(BootstrapFormMixin, forms.Form):
 
     def clean_start(self):
         return self.start_times[self.cleaned_data["start"]]
+
+
+class BlockTimeForm(BootstrapFormMixin, forms.Form):
+    """The owner closes one of their pitches for a few hours on one day."""
+
+    pitch = forms.ModelChoiceField(queryset=Pitch.objects.none(), empty_label=None)
+    day = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"))
+    starts_at = forms.TypedChoiceField(choices=HALF_HOURS[:-1], coerce=int, initial=17 * 60, label="From")
+    ends_at = forms.TypedChoiceField(choices=HALF_HOURS[1:], coerce=int, initial=19 * 60, label="To")
+    reason = forms.CharField(
+        required=False,
+        max_length=120,
+        widget=forms.TextInput(attrs={"placeholder": "e.g. maintenance, private event"}),
+    )
+
+    def __init__(self, *args, owner, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["pitch"].queryset = owner.owned_pitches.order_by("name")
+
+    def clean(self):
+        cleaned = super().clean()
+        day, starts_at, ends_at = cleaned.get("day"), cleaned.get("starts_at"), cleaned.get("ends_at")
+        if day is None or starts_at is None or ends_at is None:
+            return cleaned
+        if ends_at <= starts_at:
+            self.add_error("ends_at", "End after the start time.")
+            return cleaned
+
+        cleaned["start_time"] = local_time(day, starts_at)
+        cleaned["end_time"] = local_time(day, ends_at)
+        return cleaned

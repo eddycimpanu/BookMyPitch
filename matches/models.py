@@ -326,6 +326,16 @@ class Booking(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.CONFIRMED)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # Who cancelled the booking (the organizer or the pitch owner), and the owner's reason
+    cancelled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    cancel_reason = models.CharField(max_length=200, blank=True)
+
     class Meta:
         ordering = ["start_time"]
         constraints = [
@@ -349,6 +359,34 @@ class Booking(models.Model):
         local_start = timezone.localtime(self.start_time)
         local_end = timezone.localtime(self.end_time)
         return f"{self.pitch.name}: {local_start:%d %b %Y, %H:%M}–{local_end:%H:%M}"
+
+    @property
+    def cancelled_by_owner(self):
+        return self.cancelled_by_id is not None and self.cancelled_by_id == self.pitch.owner_id
+
+
+class BlockedTime(models.Model):
+    """A time when the owner closes a bookable pitch, for example for maintenance or a private event."""
+
+    pitch = models.ForeignKey(Pitch, on_delete=models.CASCADE, related_name="blocked_times")
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField()
+    reason = models.CharField(max_length=120, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["start_time"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(end_time__gt=models.F("start_time")),
+                name="blocked_time_ends_after_it_starts",
+            ),
+        ]
+
+    def __str__(self):
+        local_start = timezone.localtime(self.start_time)
+        local_end = timezone.localtime(self.end_time)
+        return f"{self.pitch.name} blocked {local_start:%d %b %Y, %H:%M}–{local_end:%H:%M}"
 
 
 # ---------- Team chat ----------

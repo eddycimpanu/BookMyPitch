@@ -63,7 +63,7 @@
       <li>
         <a href="{% url 'match_detail' match.pk %}">{{ match.pitch.name }}</a>,
         {{ match.start_time|date:"D j M, H:i" }}
-        {% if match.status == "cancelled" %}<span class="badge text-bg-danger ms-1">Cancelled</span>{% endif %}
+        {% if match.status == "cancelled" %}<span class="badge text-bg-danger ms-1">{% if match.booking.cancelled_by_owner %}Cancelled by the pitch owner{% else %}Cancelled{% endif %}</span>{% endif %}
       </li>
     {% endfor %}
   </ul>

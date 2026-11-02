@@ -32,4 +32,7 @@ urlpatterns = [
     path("owner/pitches/", views.OwnerPitchListView.as_view(), name="owner_pitches"),
     path("owner/pitches/new/", views.OwnerPitchFormView.as_view(), name="owner_pitch_create"),
     path("owner/pitches/<int:pk>/edit/", views.OwnerPitchFormView.as_view(), name="owner_pitch_update"),
+    path("owner/bookings/", views.OwnerBookingsView.as_view(), name="owner_bookings"),
+    path("owner/bookings/<int:pk>/cancel/", views.OwnerCancelBookingView.as_view(), name="owner_booking_cancel"),
+    path("owner/blocked/<int:pk>/remove/", views.OwnerUnblockTimeView.as_view(), name="owner_unblock"),
 ]
