@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}Book {{ pitch.name }} | BookMyPitch{% endblock %}
+
+{% block content %}
+<a href="{% url 'pitch_detail' pitch.pk %}" class="back-link">Back to {{ pitch.name }}</a>
+
+<header class="booking-header">
+  <h1>Book {{ pitch.name }}</h1>
+  <p class="text-muted mb-0">{{ pitch.address }}, {{ pitch.get_sector_display }}. {{ pitch.price_per_hour|floatformat:"-2" }} RON per hour, paid at the pitch.</p>
+</header>
+
+<div class="booking-layout">
+  <div class="booking-steps">
+    <section class="booking-step" aria-labelledby="pick-day">
+      <h2 id="pick-day" class="booking-step__title">Day</h2>
+      <div class="chip-row">
+        {% for option, is_open in days %}
+          {% if is_open %}
+            <a href="?date={{ option|date:'Y-m-d' }}&duration={{ duration }}"
+               class="chip{% if option == day %} chip--active{% endif %}"
+               {% if option == day %}aria-current="true"{% endif %}>
+              <span class="chip__small">{{ option|date:"D" }}</span>{{ option|date:"j M" }}
+            </a>
+          {% else %}
+            <span class="chip chip--closed" title="Closed">
+              <span class="chip__small">{{ option|date:"D" }}</span>{{ option|date:"j M" }}
+            </span>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="booking-step" aria-labelledby="pick-duration">
+      <h2 id="pick-duration" class="booking-step__title">How long</h2>
+      <div class="chip-row chip-row--wrap">
+        {% for value, label in durations %}
+          <a href="?date={{ day|date:'Y-m-d' }}&duration={{ value }}"
+             class="chip{% if value == duration %} chip--active{% endif %}"
+             {% if value == duration %}aria-current="true"{% endif %}>{{ label }}</a>
+        {% endfor %}
+      </div>
+    </section>
+
+    <form method="post" novalidate class="booking-step">
+      {% csrf_token %}
+
+      <h2 class="booking-step__title">Start time on {{ day|date:"l j F" }}</h2>
+      {% if form.start.field.choices %}
+        <div class="time-grid">
+          {% for radio in form.start %}
+            {{ radio.tag }}
+            <label class="time-chip" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+          {% endfor %}
+        </div>
+        {% for error in form.start.errors %}
+          <div class="text-danger small mt-2">{{ error }}</div>
+        {% endfor %}
+      {% else %}
+        <p class="booking-empty">No free times on this day for {{ duration_label }}. Try another day or a shorter booking.</p>
+      {% endif %}
+
+      <h2 class="booking-step__title mt-4">Your match</h2>
+      {% for field in form.visible_fields %}
+        {% if field.name != "start" %}
+          <div class="mb-3">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+            {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+          </div>
+        {% endif %}
+      {% endfor %}
+
+      <div class="booking-total">
+        <span>Pitch for {{ duration_label }}</span>
+        <strong>{{ total_price|floatformat:"-2" }} RON</strong>
+      </div>
+
+      <button type="submit" class="btn btn-success btn-lg w-100" {% if not form.start.field.choices %}disabled{% endif %}>
+        Book the pitch and create the match
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

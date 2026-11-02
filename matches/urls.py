@@ -21,6 +21,7 @@ urlpatterns = [
     path("organizer/matches/<int:pk>/edit/", views.MatchUpdateView.as_view(), name="match_update"),
     path("organizer/matches/<int:pk>/cancel/", views.MatchCancelView.as_view(), name="match_cancel"),
     path("organizer/pitches/new/", views.PitchCreateView.as_view(), name="pitch_create"),
+    path("organizer/pitches/<int:pk>/book/", views.BookPitchView.as_view(), name="pitch_book"),
     path(
         "organizer/participations/<int:pk>/remove/",
         views.RemovePlayerView.as_view(),

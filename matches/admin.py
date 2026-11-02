@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import ChatMessage, Match, MatchExit, OpeningHours, Participation, Pitch
+from .models import Booking, ChatMessage, Match, MatchExit, OpeningHours, Participation, Pitch
 
 
 class ParticipationInline(admin.TabularInline):
@@ -47,3 +47,10 @@ class MatchExitAdmin(admin.ModelAdmin):
 class ChatMessageAdmin(admin.ModelAdmin):
     list_display = ("author", "match", "body", "created_at")
     search_fields = ("body", "author__username")
+
+
+@admin.register(Booking)
+class BookingAdmin(admin.ModelAdmin):
+    list_display = ("pitch", "start_time", "end_time", "price", "status", "match")
+    list_filter = ("status",)
+    date_hierarchy = "start_time"

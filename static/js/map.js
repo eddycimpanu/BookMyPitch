@@ -99,7 +99,10 @@ async function initHomeMap(element) {
     .flatMap((pitch) => pitch.matches.map((match) => ({ ...match, pitch })))
     .sort((a, b) => a.start_iso.localeCompare(b.start_iso));
 
-  if (allMatches.length === 0) {
+  // Pitches listed by their owner stay on the map even without matches, so organizers can book them
+  const bookablePitches = data.pitches.filter((pitch) => pitch.bookable);
+
+  if (allMatches.length === 0 && bookablePitches.length === 0) {
     summary.textContent = "No upcoming matches yet.";
     form.hidden = true;
     list.replaceChildren(el("p", "list-message", "When an organizer schedules a match, it will show up here."));
@@ -115,8 +118,9 @@ async function initHomeMap(element) {
     const filtered = isFiltered(filters);
 
     renderSummary(summary, visible, allMatches.length, filtered);
-    renderList(list, visible, (match) => focusPitch(map, element, markers.get(match.pitch.id)));
-    markers = renderMarkers(markerLayer, visible);
+    renderList(list, visible, allMatches.length, (match) => focusPitch(map, element, markers.get(match.pitch.id)));
+    const bookable = bookablePitches.filter((pitch) => !filters.sector || String(pitch.sector_id) === filters.sector);
+    markers = renderMarkers(markerLayer, visible, bookable);
     clearButton.hidden = !filtered;
 
     // Move the map so all remaining pitches are in view
@@ -204,9 +208,13 @@ function renderSummary(summary, visible, total, filtered) {
     : `${total} upcoming ${matchWord}, ${openSpots} open ${spotWord}`;
 }
 
-function renderList(list, matches, onSelect) {
+function renderList(list, matches, totalMatches, onSelect) {
   list.replaceChildren();
 
+  if (totalMatches === 0) {
+    list.appendChild(el("p", "list-message", "No upcoming matches yet. Pitches marked with + can be booked."));
+    return;
+  }
   if (matches.length === 0) {
     list.appendChild(el("p", "list-message", "No matches fit these filters. Try another day or sector."));
     return;
@@ -222,8 +230,9 @@ function renderList(list, matches, onSelect) {
   });
 }
 
-// One marker per pitch, counting only the matches that pass the filters
-function renderMarkers(layer, matches) {
+// One marker per pitch, counting only the matches that pass the filters.
+// Bookable pitches with no visible match get a "+" marker instead of a number.
+function renderMarkers(layer, matches, bookablePitches = []) {
   layer.clearLayers();
 
   const byPitch = new Map();
@@ -241,7 +250,25 @@ function renderMarkers(layer, matches) {
     markers.set(pitch.id, marker);
   });
 
+  bookablePitches.forEach((pitch) => {
+    if (markers.has(pitch.id)) return;
+    const marker = L.marker([pitch.lat, pitch.lng], { icon: bookableIcon(), title: `${pitch.name}, can be booked` })
+      .bindPopup(buildPopup(pitch, []), { maxWidth: 300 });
+    layer.addLayer(marker);
+    markers.set(pitch.id, marker);
+  });
+
   return markers;
+}
+
+function bookableIcon() {
+  return L.divIcon({
+    className: "",
+    html: '<span class="pitch-marker pitch-marker--bookable">+</span>',
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
+    popupAnchor: [0, -20],
+  });
 }
 
 function buildListItem(match, onSelect) {
@@ -297,6 +324,15 @@ function buildPopup(pitch, matches) {
     row.append(info, link);
     box.appendChild(row);
   });
+
+  if (pitch.bookable) {
+    const footer = el("div", "popup__book");
+    footer.appendChild(el("span", "", `${priceText(pitch.price_per_hour)} per hour`));
+    const link = el("a", "btn btn-floodlight btn-sm", "Book an hour");
+    link.href = pitch.url;
+    footer.appendChild(link);
+    box.appendChild(footer);
+  }
 
   return box;
 }

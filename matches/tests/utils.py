@@ -35,3 +35,15 @@ def make_match(organizer, pitch=None, starts_in=timedelta(days=2), spots_needed=
         spots_needed=spots_needed,
         **extra,
     )
+
+
+def make_owner(username="owner"):
+    return make_user(username, role=User.Role.OWNER)
+
+
+def make_owned_pitch(owner, name="Owned Pitch"):
+    pitch = make_pitch(created_by=owner, name=name)
+    pitch.owner = owner
+    pitch.price_per_hour = 150
+    pitch.save()
+    return pitch

@@ -2,6 +2,8 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
+from django.contrib.postgres.constraints import ExclusionConstraint
+from django.contrib.postgres.fields import DateTimeRangeField, RangeBoundary, RangeOperators
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
@@ -293,6 +295,60 @@ class MatchExit(models.Model):
 
     def __str__(self):
         return f"{self.player} {self.get_reason_display().lower()} ({self.match})"
+
+
+# ---------- Pitch bookings ----------
+
+
+class TsTzRange(models.Func):
+    """PostgreSQL's tstzrange(start, end): a time interval, used to detect overlapping bookings."""
+
+    function = "TSTZRANGE"
+    output_field = DateTimeRangeField()
+
+
+class Booking(models.Model):
+    """An organizer renting a bookable pitch for a time slot. Every booking comes with its match."""
+
+    class Status(models.TextChoices):
+        CONFIRMED = "confirmed", "Confirmed"
+        CANCELLED = "cancelled", "Cancelled"
+
+    pitch = models.ForeignKey(Pitch, on_delete=models.CASCADE, related_name="bookings")
+    match = models.OneToOneField(Match, on_delete=models.CASCADE, related_name="booking")
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField()
+    price = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        help_text="What the organizer pays for the pitch, in RON, at the price when it was booked.",
+    )
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.CONFIRMED)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["start_time"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(end_time__gt=models.F("start_time")),
+                name="booking_ends_after_it_starts",
+            ),
+            # PostgreSQL itself refuses two confirmed bookings of the same pitch whose times overlap.
+            # "[)" means the start is included and the end is not, so 20:00-21:00 and 21:00-22:00 can coexist.
+            ExclusionConstraint(
+                name="no_overlapping_bookings",
+                expressions=[
+                    (TsTzRange("start_time", "end_time", RangeBoundary()), RangeOperators.OVERLAPS),
+                    ("pitch", RangeOperators.EQUAL),
+                ],
+                condition=models.Q(status="confirmed"),
+            ),
+        ]
+
+    def __str__(self):
+        local_start = timezone.localtime(self.start_time)
+        local_end = timezone.localtime(self.end_time)
+        return f"{self.pitch.name}: {local_start:%d %b %Y, %H:%M}–{local_end:%H:%M}"
 
 
 # ---------- Team chat ----------

@@ -59,7 +59,9 @@
       <h2 class="h4">From the organizer</h2>
       <p>{{ match.description|linebreaksbr }}</p>
     {% endif %}
-    <p class="text-muted">Organized by {{ match.organizer.username }}</p>
+    <p class="text-muted">
+      Organized by {{ match.organizer.username }}{% if match.booking.status == "confirmed" %}, pitch booked through BookMyPitch{% endif %}
+    </p>
 
     <div id="match-map"
          data-lat="{{ match.pitch.latitude|unlocalize }}"

@@ -76,7 +76,14 @@
             </li>
           {% endfor %}
         </ul>
-        <button class="btn btn-floodlight w-100" disabled>Book an hour (available soon)</button>
+        {% if can_book %}
+          <a href="{% url 'pitch_book' pitch.pk %}" class="btn btn-floodlight w-100">Book an hour</a>
+        {% elif not user.is_authenticated %}
+          <a href="{% url 'login' %}?next={% url 'pitch_book' pitch.pk %}" class="btn btn-floodlight w-100">Log in to book</a>
+          <p class="text-muted small mt-2 mb-0">Booking is for organizer accounts.</p>
+        {% elif user != pitch.owner %}
+          <p class="text-muted small mb-0">Only organizer accounts can book pitches.</p>
+        {% endif %}
       {% else %}
         <p class="text-muted mb-0">An organizer added this pitch, so it can't be booked through BookMyPitch.</p>
       {% endif %}

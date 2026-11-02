@@ -1,9 +1,9 @@
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
-from django.db.models import Count, Prefetch
+from django.db.models import Count, Prefetch, Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
@@ -13,7 +13,8 @@ from django.views.generic import CreateView, DetailView, ListView, TemplateView,
 
 from accounts.mixins import OrganizerRequiredMixin, OwnerRequiredMixin
 
-from .forms import MatchForm, OwnerPitchForm, PitchForm, WeeklyHoursForm
+from .bookings import BookingError, book_pitch, booking_days, booking_price, free_start_times, release_booking
+from .forms import BookedMatchForm, BookingForm, MatchForm, OwnerPitchForm, PitchForm, WeeklyHoursForm
 from .models import ChatMessage, Match, OpeningHours, Participation, Pitch
 from .services import (
     LEAVE_DEADLINE,
@@ -54,7 +55,7 @@ class HomeView(TemplateView):
 
 
 def pitches_api(request):
-    """Return pitches that have upcoming, non-cancelled matches, as JSON for the map."""
+    """Return pitches with upcoming, non-cancelled matches, and every bookable pitch, as JSON for the map."""
     now = timezone.now()
     today = timezone.localdate()
     tomorrow = today + timedelta(days=1)
@@ -69,8 +70,7 @@ def pitches_api(request):
 
     pitches = (
         Pitch.objects.filter(
-            matches__start_time__gt=now,
-            matches__status__in=visible_statuses,
+            Q(matches__start_time__gt=now, matches__status__in=visible_statuses) | Q(owner__isnull=False)
         )
         .distinct()
         .prefetch_related(Prefetch("matches", queryset=upcoming_matches, to_attr="upcoming_matches"))
@@ -105,10 +105,14 @@ def pitches_api(request):
             "sector_id": pitch.sector,
             "lat": float(pitch.latitude),
             "lng": float(pitch.longitude),
+            "bookable": pitch.is_bookable,
+            "price_per_hour": str(pitch.price_per_hour) if pitch.is_bookable else None,
+            "url": reverse("pitch_detail", args=[pitch.pk]),
             "matches": matches,
         })
 
     return JsonResponse({"pitches": data})
+
 
 class MatchDetailView(DetailView):
     model = Match
@@ -116,7 +120,9 @@ class MatchDetailView(DetailView):
     context_object_name = "match"
 
     def get_queryset(self):
-        return Match.objects.select_related("pitch", "organizer").prefetch_related("participations__player")
+        return Match.objects.select_related("pitch", "organizer", "booking").prefetch_related(
+            "participations__player"
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -142,7 +148,8 @@ class MatchDetailView(DetailView):
             "can_chat": can_use_chat(match, user),
         })
         return context
-    
+
+
 # ---------- Organizer views ----------
 
 
@@ -153,7 +160,7 @@ class MyMatchesView(OrganizerRequiredMixin, ListView):
     def get_queryset(self):
         return (
             Match.objects.filter(organizer=self.request.user)
-            .select_related("pitch")
+            .select_related("pitch", "booking")
             .prefetch_related("participations__player")
             .order_by("start_time")
         )
@@ -217,6 +224,10 @@ class MatchUpdateView(OrganizerRequiredMixin, UpdateView):
             start_time__gt=timezone.now(),
         ).exclude(status=Match.Status.CANCELLED)
 
+    def get_form_class(self):
+        # A booked match keeps the pitch and the time of its booking
+        return BookedMatchForm if hasattr(self.object, "booking") else MatchForm
+
     def form_valid(self, form):
         form.instance.refresh_status()
         messages.success(self.request, "Changes saved.")
@@ -228,9 +239,15 @@ class MatchCancelView(OrganizerRequiredMixin, View):
 
     def post(self, request, pk):
         match = get_object_or_404(Match, pk=pk, organizer=request.user)
-        match.status = Match.Status.CANCELLED
-        match.save(update_fields=["status"])
-        messages.success(request, f"The match at {match.pitch.name} was cancelled.")
+        with transaction.atomic():
+            match.status = Match.Status.CANCELLED
+            match.save(update_fields=["status"])
+            released = release_booking(match)
+
+        message = f"The match at {match.pitch.name} was cancelled."
+        if released:
+            message += " Your pitch booking was cancelled too, so the time is free again."
+        messages.success(request, message)
         return redirect("my_matches")
 
 
@@ -245,7 +262,8 @@ class RemovePlayerView(OrganizerRequiredMixin, View):
 
         messages.success(request, f"{player.username} was removed and can't rejoin this match.")
         return redirect("match_detail", pk=match.pk)
-    
+
+
 # ---------- Player views ----------
 
 
@@ -299,7 +317,8 @@ class JoinedMatchesView(LoginRequiredMixin, ListView):
         context["upcoming"] = upcoming
         context["past"] = list(reversed(past))
         return context
-    
+
+
 # ---------- Team chat ----------
 
 CHAT_MESSAGE_MAX_LENGTH = 1000
@@ -393,6 +412,7 @@ class PitchDetailView(DetailView):
             .exclude(status=Match.Status.CANCELLED)
             .order_by("start_time")[:10]
         )
+        context["can_book"] = pitch.is_bookable and getattr(self.request.user, "is_organizer", False)
         return context
 
 
@@ -443,4 +463,77 @@ class OwnerPitchFormView(OwnerRequiredMixin, View):
             "form": pitch_form,
             "hours_form": hours_form,
             "pitch": pitch,
+        })
+
+
+# ---------- Booking a pitch ----------
+
+
+class BookPitchView(OrganizerRequiredMixin, View):
+    """Pick a day, a duration and a free start time, then book the pitch and create the match."""
+
+    template_name = "matches/pitch_book.html"
+
+    def load_choices(self, request, pk):
+        self.pitch = get_object_or_404(
+            Pitch.objects.filter(owner__isnull=False).prefetch_related("opening_hours"),
+            pk=pk,
+        )
+        self.days = booking_days(self.pitch)
+        open_days = [day for day, is_open in self.days if is_open]
+
+        self.day = None
+        try:
+            asked = date.fromisoformat(request.GET.get("date", ""))
+            if any(day == asked for day, _ in self.days):
+                self.day = asked
+        except ValueError:
+            pass
+        if self.day is None:
+            self.day = open_days[0] if open_days else self.days[0][0]
+
+        durations = [value for value, _ in Match.Duration.choices]
+        asked_duration = request.GET.get("duration", "")
+        self.duration = int(asked_duration) if asked_duration.isdigit() and int(asked_duration) in durations else 60
+
+        self.start_times = free_start_times(self.pitch, self.day, self.duration)
+
+    def get(self, request, pk):
+        self.load_choices(request, pk)
+        return self.render_page(BookingForm(start_times=self.start_times))
+
+    def post(self, request, pk):
+        self.load_choices(request, pk)
+        form = BookingForm(request.POST, start_times=self.start_times)
+        if not form.is_valid():
+            return self.render_page(form)
+
+        try:
+            match = book_pitch(
+                self.pitch.pk,
+                request.user,
+                form.cleaned_data["start"],
+                self.duration,
+                form.cleaned_data["spots_needed"],
+                form.cleaned_data["price_per_player"],
+                form.cleaned_data["description"],
+            )
+        except BookingError as error:
+            messages.error(request, str(error))
+            self.start_times = free_start_times(self.pitch, self.day, self.duration)
+            return self.render_page(BookingForm(request.POST, start_times=self.start_times))
+
+        messages.success(request, "Pitch booked. Your match is on the map, now let players join.")
+        return redirect("match_detail", pk=match.pk)
+
+    def render_page(self, form):
+        return render(self.request, self.template_name, {
+            "pitch": self.pitch,
+            "form": form,
+            "days": self.days,
+            "day": self.day,
+            "durations": Match.Duration.choices,
+            "duration": self.duration,
+            "duration_label": Match.Duration(self.duration).label,
+            "total_price": booking_price(self.pitch, self.duration),
         })

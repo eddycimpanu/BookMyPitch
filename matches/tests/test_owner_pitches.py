@@ -1,11 +1,10 @@
 from django.test import TestCase
 from django.urls import reverse
 
-from accounts.models import User
 from matches.forms import MatchForm, WeeklyHoursForm
 from matches.models import OpeningHours
 
-from .utils import make_organizer, make_pitch, make_user
+from .utils import make_organizer, make_owned_pitch, make_owner, make_pitch, make_user
 
 PITCH_DATA = {
     "name": "Arena Test",
@@ -15,18 +14,6 @@ PITCH_DATA = {
     "longitude": "26.100000",
     "price_per_hour": "150",
 }
-
-
-def make_owner(username="owner"):
-    return make_user(username, role=User.Role.OWNER)
-
-
-def make_owned_pitch(owner, name="Owned Pitch"):
-    pitch = make_pitch(created_by=owner, name=name)
-    pitch.owner = owner
-    pitch.price_per_hour = 150
-    pitch.save()
-    return pitch
 
 
 def hours_data(open_days=range(7), opens=17 * 60, closes=23 * 60):

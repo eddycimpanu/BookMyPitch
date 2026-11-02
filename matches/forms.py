@@ -43,7 +43,21 @@ class PitchForm(BootstrapFormMixin, forms.ModelForm):
         return self._clean_coordinate("longitude", LONGITUDE_RANGE)
 
 
-class MatchForm(BootstrapFormMixin, forms.ModelForm):
+class KeepJoinedPlayersMixin:
+    """When editing a match, don't allow fewer spots than players who already joined."""
+
+    def clean_spots_needed(self):
+        spots_needed = self.cleaned_data["spots_needed"]
+        if self.instance.pk:
+            taken = self.instance.participations.count()
+            if spots_needed < taken:
+                raise forms.ValidationError(
+                    f"{taken} players already joined. Keep at least {taken} spots or remove players first."
+                )
+        return spots_needed
+
+
+class MatchForm(BootstrapFormMixin, KeepJoinedPlayersMixin, forms.ModelForm):
     class Meta:
         model = Match
         fields = ["pitch", "start_time", "duration_minutes", "spots_needed", "price_per_player", "description"]
@@ -72,15 +86,22 @@ class MatchForm(BootstrapFormMixin, forms.ModelForm):
             raise forms.ValidationError("Kick-off must be in the future.")
         return start_time
 
-    def clean_spots_needed(self):
-        spots_needed = self.cleaned_data["spots_needed"]
-        if self.instance.pk:
-            taken = self.instance.participations.count()
-            if spots_needed < taken:
-                raise forms.ValidationError(
-                    f"{taken} players already joined. Keep at least {taken} spots or remove players first."
-                )
-        return spots_needed
+
+class BookedMatchForm(BootstrapFormMixin, KeepJoinedPlayersMixin, forms.ModelForm):
+    """Editing a match that came from a booking: the pitch and the time are fixed by the booking."""
+
+    class Meta:
+        model = Match
+        fields = ["spots_needed", "price_per_player", "description"]
+        widgets = {
+            "description": forms.Textarea(
+                attrs={"rows": 3, "placeholder": "Level, what to bring, where to meet..."}
+            ),
+        }
+        labels = {
+            "spots_needed": "Players needed",
+            "price_per_player": "Price per player (RON)",
+        }
 
 
 class OwnerPitchForm(PitchForm):
@@ -169,3 +190,41 @@ class WeeklyHoursForm(forms.Form):
             for weekday, _ in OpeningHours.Weekday.choices
             if self.cleaned_data[f"day{weekday}_open"]
         )
+
+
+class BookingForm(BootstrapFormMixin, forms.Form):
+    """Pick one of the free start times, and describe the match that goes with the booking."""
+
+    start = forms.ChoiceField(widget=forms.RadioSelect, label="Start time")
+    spots_needed = forms.IntegerField(
+        min_value=1,
+        max_value=20,
+        label="Players needed",
+        help_text="How many more players you are looking for.",
+    )
+    price_per_player = forms.DecimalField(
+        min_value=0,
+        max_digits=6,
+        decimal_places=2,
+        initial=0,
+        label="Price per player (RON)",
+        help_text="Use 0 for free matches.",
+    )
+    description = forms.CharField(
+        required=False,
+        label="Description",
+        widget=forms.Textarea(attrs={"rows": 3, "placeholder": "Level, what to bring, where to meet..."}),
+    )
+
+    def __init__(self, *args, start_times=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.start_times = {start.isoformat(): start for start in start_times}
+        self.fields["start"].choices = [
+            (key, timezone.localtime(start).strftime("%H:%M")) for key, start in self.start_times.items()
+        ]
+        self.fields["start"].error_messages["required"] = "Pick a start time."
+        # The times are drawn as chips by the template, so they don't get Bootstrap's radio style
+        self.fields["start"].widget.attrs["class"] = "btn-check"
+
+    def clean_start(self):
+        return self.start_times[self.cleaned_data["start"]]

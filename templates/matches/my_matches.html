@@ -25,6 +25,7 @@
         <div>
           <h3 class="organizer-match__pitch">
             <a href="{% url 'match_detail' match.pk %}">{{ match.pitch.name }}</a>
+            {% if match.booking %}<span class="booked-tag">Booked</span>{% endif %}
           </h3>
           <div class="match-item__spots">
             {% include "includes/spot_dots.html" %}

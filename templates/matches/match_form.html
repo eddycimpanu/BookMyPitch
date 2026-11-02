@@ -9,7 +9,15 @@
 
   <div class="form-card">
     {% if not object %}
-      <p class="text-muted">Playing somewhere new? <a href="{% url 'pitch_create' %}">Add the pitch first</a>.</p>
+      <p class="text-muted">
+        Playing somewhere new? <a href="{% url 'pitch_create' %}">Add the pitch first</a>.
+        Pitches that can be booked are booked from their page on the map.
+      </p>
+    {% elif object.booking %}
+      <p class="text-muted">
+        You booked {{ object.pitch.name }} for this match, so the pitch and the time stay as booked.
+        To change them, cancel the match and book another time.
+      </p>
     {% endif %}
 
     <form method="post" novalidate>
