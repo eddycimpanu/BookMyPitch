@@ -122,12 +122,17 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 
 
 # Email
+# The console backend prints every email in the terminal where runserver runs, instead of sending it.
 
 MAILERS = {
     'default': {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+DEFAULT_FROM_EMAIL = "BookMyPitch <no-reply@bookmypitch.local>"
+
+# The start of the links in emails (an email has no "current page" to build links from)
+SITE_URL = os.getenv("SITE_URL", "http://127.0.0.1:8000")
 
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "home"

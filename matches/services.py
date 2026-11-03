@@ -5,6 +5,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from .models import Match, MatchExit, Participation, WaitlistEntry
+from .notifications import notify_match_full, notify_promoted
 
 # Players can give up their spot until this long before kick-off
 LEAVE_DEADLINE = timedelta(hours=2)
@@ -15,6 +16,15 @@ REJOIN_COOLDOWN = timedelta(hours=1)
 
 class MatchActionError(Exception):
     """Raised when a player can't join or leave a match. The message is shown to the user."""
+
+
+def update_status(match):
+    """Save the status after the lineup changed. The organizer gets an email when the match fills up."""
+    was_full = match.status == Match.Status.FULL
+    match.refresh_status()
+    match.save(update_fields=["status"])
+    if match.status == Match.Status.FULL and not was_full:
+        notify_match_full(match)
 
 
 def rejoin_block_reason(match, player):
@@ -67,8 +77,7 @@ def join_match(match_id, player):
         # If they were also waiting in line, they don't need to any more
         WaitlistEntry.objects.filter(match=match, player=player).delete()
 
-        match.refresh_status()
-        match.save(update_fields=["status"])
+        update_status(match)
 
     return match
 
@@ -98,8 +107,7 @@ def leave_match(match_id, player):
         # nobody can grab the freed spot before the first player in line gets it.
         promoted = promote_from_waitlist(match)
 
-        match.refresh_status()
-        match.save(update_fields=["status"])
+        update_status(match)
 
     return promoted
 
@@ -122,8 +130,7 @@ def remove_player(participation_id, organizer):
         MatchExit.objects.create(match=match, player=player, reason=MatchExit.Reason.REMOVED)
         promoted = promote_from_waitlist(match)
 
-        match.refresh_status()
-        match.save(update_fields=["status"])
+        update_status(match)
 
     return player, match, promoted
 
@@ -200,6 +207,8 @@ def promote_from_waitlist(match):
         entry.delete()
         promoted.append(entry.player)
 
+    if promoted:
+        notify_promoted(match, promoted)
     return promoted
 
 
@@ -208,8 +217,7 @@ def fill_open_spots(match_id):
     with transaction.atomic():
         match = Match.objects.select_for_update().get(pk=match_id)
         promoted = promote_from_waitlist(match)
-        match.refresh_status()
-        match.save(update_fields=["status"])
+        update_status(match)
 
     return promoted
 

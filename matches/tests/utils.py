@@ -7,9 +7,11 @@ from accounts.models import User
 from matches.models import Match, Pitch
 
 
-def make_user(username, role=User.Role.PLAYER):
+def make_user(username, role=User.Role.PLAYER, email=None):
     # No password: tests log in with force_login, and skipping hashing keeps them fast
-    return User.objects.create_user(username=username, password=None, role=role)
+    if email is None:
+        email = f"{username}@example.com"
+    return User.objects.create_user(username=username, email=email, password=None, role=role)
 
 
 def make_organizer(username="organizer"):

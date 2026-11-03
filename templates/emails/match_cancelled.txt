@@ -1,0 +1,11 @@
+{% autoescape off %}Cancelled: {{ match.pitch.name }}, {{ match.start_time|date:"D j M, H:i" }}
+Hi {{ user.username }},
+
+{% if by_owner %}The pitch owner cancelled the booking{% if user == match.organizer %} you made{% endif %}, so this match is cancelled.{% if reason %}
+Reason: {{ reason }}{% endif %}{% else %}The organizer cancelled this match.{% endif %}
+
+{% include "emails/match_details.txt" %}
+{% if user == match.organizer %}You can book another time for your players on the pitch page.{% else %}Find another match on the map: {{ site_url }}{% endif %}
+
+BookMyPitch
+{% endautoescape %}

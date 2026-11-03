@@ -188,6 +188,8 @@ class Match(models.Model):
     description = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
     created_at = models.DateTimeField(auto_now_add=True)
+    # Set when the "kick-off in 2 hours" email goes out, so it is never sent twice
+    reminder_sent_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["start_time"]

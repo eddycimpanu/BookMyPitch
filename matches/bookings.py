@@ -7,6 +7,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from .models import BlockedTime, Booking, Match, Pitch
+from .notifications import notify_match_cancelled
 
 # Bookings start on the hour or on the half hour
 SLOT_STEP_MINUTES = 30
@@ -142,6 +143,7 @@ def cancel_booking(booking_id, owner, reason=""):
 
         booking.match.status = Match.Status.CANCELLED
         booking.match.save(update_fields=["status"])
+        notify_match_cancelled(booking.match, by_owner=True, reason=booking.cancel_reason)
 
     return booking
 

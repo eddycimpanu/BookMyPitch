@@ -1,0 +1,4 @@
+Pitch: {{ match.pitch.name }}, {{ match.pitch.address }}, {{ match.pitch.get_sector_display }}
+Kick-off: {{ match.start_time|date:"l j F, H:i" }}
+Duration: {{ match.get_duration_minutes_display }}
+Price per player: {% if match.price_per_player %}{{ match.price_per_player|floatformat:"-2" }} RON{% else %}free{% endif %}

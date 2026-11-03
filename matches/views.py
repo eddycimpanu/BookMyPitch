@@ -33,6 +33,7 @@ from .forms import (
     WeeklyHoursForm,
 )
 from .models import BlockedTime, Booking, ChatMessage, Match, OpeningHours, Participation, Pitch, WaitlistEntry
+from .notifications import notify_match_cancelled
 from .services import (
     LEAVE_DEADLINE,
     MatchActionError,
@@ -281,9 +282,12 @@ class MatchCancelView(OrganizerRequiredMixin, View):
     def post(self, request, pk):
         match = get_object_or_404(Match, pk=pk, organizer=request.user)
         with transaction.atomic():
+            was_cancelled = match.status == Match.Status.CANCELLED
             match.status = Match.Status.CANCELLED
             match.save(update_fields=["status"])
             released = release_booking(match)
+            if not was_cancelled:
+                notify_match_cancelled(match)
 
         message = f"The match at {match.pitch.name} was cancelled."
         if released:

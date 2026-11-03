@@ -1,0 +1,13 @@
+{% autoescape off %}Your match is full: {{ match.pitch.name }}, {{ match.start_time|date:"D j M, H:i" }}
+Hi {{ user.username }},
+
+All {{ match.spots_needed }} spots in your match are taken.
+
+Players: {% for player in players %}{{ player.username }}{% if not forloop.last %}, {% endif %}{% endfor %}
+
+{% include "emails/match_details.txt" %}
+Team chat and lineup:
+{{ url }}
+
+BookMyPitch
+{% endautoescape %}

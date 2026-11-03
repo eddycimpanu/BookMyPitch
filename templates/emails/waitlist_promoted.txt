@@ -1,0 +1,14 @@
+{% autoescape off %}You're in: {{ match.pitch.name }}, {{ match.start_time|date:"D j M, H:i" }}
+Hi {{ user.username }},
+
+A spot opened in a match you were waiting for, and it's yours now.
+
+{% include "emails/match_details.txt" %}
+See the lineup and talk to your team here:
+{{ url }}
+
+Can't make it? Leave the match from that page, up to 2 hours before kick-off, so the next player in line gets the spot.
+
+See you on the pitch,
+BookMyPitch
+{% endautoescape %}

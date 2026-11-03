@@ -1,0 +1,14 @@
+{% autoescape off %}Kick-off soon: {{ match.pitch.name }} at {{ match.start_time|date:"H:i" }}
+Hi {{ user.username }},
+
+Your match starts soon, at {{ match.start_time|date:"H:i" }}.{% if user == match.organizer %} You organize it.{% endif %}
+
+{% include "emails/match_details.txt" %}
+Lineup: {{ players|length }} of {{ match.spots_needed }} spots taken{% if players %} ({% for player in players %}{{ player.username }}{% if not forloop.last %}, {% endif %}{% endfor %}){% endif %}
+
+Last details in the team chat:
+{{ url }}
+
+Have a good game,
+BookMyPitch
+{% endautoescape %}
