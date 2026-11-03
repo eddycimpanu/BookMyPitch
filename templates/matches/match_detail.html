@@ -106,6 +106,19 @@
         {% endfor %}
       </ul>
 
+      {% if waitlist %}
+        <div class="waitlist">
+          <h3 class="waitlist__title">Waitlist <span class="waitlist__count">{{ waitlist|length }}</span></h3>
+          <ol class="waitlist__list">
+            {% for entry in waitlist %}
+              <li{% if entry.player == user %} class="waitlist__you"{% endif %}>
+                {{ entry.player.username }}{% if entry.player == user %} (you){% endif %}
+              </li>
+            {% endfor %}
+          </ol>
+        </div>
+      {% endif %}
+
       {% if user == match.organizer %}
         <p class="lineup__note">You organize this match.</p>
 
@@ -123,6 +136,14 @@
           </p>
         {% endif %}
 
+      {% elif waitlist_position %}
+        <p class="lineup__note lineup__note--joined">You're #{{ waitlist_position }} on the waitlist.</p>
+        <p class="lineup__note small mt-1">If a spot opens, you get it automatically and the match moves to Joined matches.</p>
+        <form method="post" action="{% url 'waitlist_leave' match.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-light w-100 mt-3">Leave waitlist</button>
+        </form>
+
       {% elif can_join %}
         {% if user.is_authenticated %}
           <form method="post" action="{% url 'match_join' match.pk %}">
@@ -132,6 +153,17 @@
         {% else %}
           <a href="{% url 'login' %}?next={{ request.path|urlencode }}" class="btn btn-floodlight w-100">Log in to join</a>
         {% endif %}
+
+      {% elif can_join_waitlist %}
+        {% if user.is_authenticated %}
+          <form method="post" action="{% url 'waitlist_join' match.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-floodlight w-100">Join waitlist</button>
+          </form>
+        {% else %}
+          <a href="{% url 'login' %}?next={{ request.path|urlencode }}" class="btn btn-floodlight w-100">Log in to join the waitlist</a>
+        {% endif %}
+        <p class="lineup__note small mt-2">The match is full. If someone leaves, the first player on the waitlist gets the spot.</p>
 
       {% elif join_block_reason %}
         <button class="btn btn-floodlight w-100" disabled>Join match</button>

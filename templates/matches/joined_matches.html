@@ -48,6 +48,19 @@
   </div>
 {% endif %}
 
+{% if waiting %}
+  <h2 class="section-title mt-5">On the waitlist</h2>
+  <ul class="past-list">
+    {% for match, position in waiting %}
+      <li>
+        <a href="{% url 'match_detail' match.pk %}">{{ match.pitch.name }}</a>,
+        {{ match.start_time|date:"D j M, H:i" }}
+        <span class="badge text-bg-warning ms-1">#{{ position }} in line</span>
+      </li>
+    {% endfor %}
+  </ul>
+{% endif %}
+
 {% if past %}
   <h2 class="section-title mt-5">Past and cancelled</h2>
   <ul class="past-list">

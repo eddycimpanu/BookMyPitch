@@ -1,10 +1,26 @@
 from django.contrib import admin
 
-from .models import BlockedTime, Booking, ChatMessage, Match, MatchExit, OpeningHours, Participation, Pitch
+from .models import (
+    BlockedTime,
+    Booking,
+    ChatMessage,
+    Match,
+    MatchExit,
+    OpeningHours,
+    Participation,
+    Pitch,
+    WaitlistEntry,
+)
 
 
 class ParticipationInline(admin.TabularInline):
     model = Participation
+    extra = 0
+    readonly_fields = ("joined_at",)
+
+
+class WaitlistInline(admin.TabularInline):
+    model = WaitlistEntry
     extra = 0
     readonly_fields = ("joined_at",)
 
@@ -28,11 +44,17 @@ class MatchAdmin(admin.ModelAdmin):
     list_filter = ("status", "pitch__sector")
     search_fields = ("pitch__name", "organizer__username")
     date_hierarchy = "start_time"
-    inlines = [ParticipationInline]
+    inlines = [ParticipationInline, WaitlistInline]
 
 
 @admin.register(Participation)
 class ParticipationAdmin(admin.ModelAdmin):
+    list_display = ("player", "match", "joined_at")
+    search_fields = ("player__username", "match__pitch__name")
+
+
+@admin.register(WaitlistEntry)
+class WaitlistEntryAdmin(admin.ModelAdmin):
     list_display = ("player", "match", "joined_at")
     search_fields = ("player__username", "match__pitch__name")
 

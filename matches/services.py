@@ -4,7 +4,7 @@ from datetime import timedelta
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from .models import Match, MatchExit, Participation
+from .models import Match, MatchExit, Participation, WaitlistEntry
 
 # Players can give up their spot until this long before kick-off
 LEAVE_DEADLINE = timedelta(hours=2)
@@ -64,6 +64,9 @@ def join_match(match_id, player):
             # Backup: the unique constraint in the database caught a duplicate
             raise MatchActionError("You already have a spot in this match.")
 
+        # If they were also waiting in line, they don't need to any more
+        WaitlistEntry.objects.filter(match=match, player=player).delete()
+
         match.refresh_status()
         match.save(update_fields=["status"])
 
@@ -71,7 +74,10 @@ def join_match(match_id, player):
 
 
 def leave_match(match_id, player):
-    """Remove `player` from the match, if it's not too close to kick-off."""
+    """Remove `player` from the match, if it's not too close to kick-off.
+
+    Returns the players from the waitlist who got the freed spot (an empty list if nobody was waiting).
+    """
     with transaction.atomic():
         match = Match.objects.select_for_update().get(pk=match_id)
 
@@ -88,15 +94,20 @@ def leave_match(match_id, player):
         participation.delete()
         MatchExit.objects.create(match=match, player=player, reason=MatchExit.Reason.LEFT)
 
+        # Still inside the same transaction and the same lock:
+        # nobody can grab the freed spot before the first player in line gets it.
+        promoted = promote_from_waitlist(match)
+
         match.refresh_status()
         match.save(update_fields=["status"])
 
-    return match
+    return promoted
 
 
 def remove_player(participation_id, organizer):
     """Organizer removes a player from one of their matches. The player can't rejoin it.
 
+    Returns (removed player, match, players promoted from the waitlist).
     Raises Participation.DoesNotExist if the spot doesn't exist or the match isn't the organizer's.
     """
     with transaction.atomic():
@@ -109,11 +120,104 @@ def remove_player(participation_id, organizer):
 
         participation.delete()
         MatchExit.objects.create(match=match, player=player, reason=MatchExit.Reason.REMOVED)
+        promoted = promote_from_waitlist(match)
 
         match.refresh_status()
         match.save(update_fields=["status"])
 
-    return player, match
+    return player, match, promoted
+
+
+# ---------- Waitlist ----------
+
+
+def join_waitlist(match_id, player):
+    """Put `player` at the end of the line for a full match."""
+    with transaction.atomic():
+        # Same lock as join_match, so the match can't change between the checks and the insert
+        match = Match.objects.select_for_update().get(pk=match_id)
+
+        if match.status == Match.Status.CANCELLED:
+            raise MatchActionError("This match was cancelled.")
+        if match.has_started:
+            raise MatchActionError("This match has already started.")
+        if match.organizer_id == player.id:
+            raise MatchActionError("You organize this match, so you already have your place.")
+        if match.participations.filter(player=player).exists():
+            raise MatchActionError("You already have a spot in this match.")
+        if match.waitlist.filter(player=player).exists():
+            raise MatchActionError("You're already on the waitlist.")
+
+        block_reason = rejoin_block_reason(match, player)
+        if block_reason:
+            raise MatchActionError(block_reason)
+
+        if not match.is_full:
+            raise MatchActionError("A spot is free, so you can join the match right away.")
+
+        try:
+            WaitlistEntry.objects.create(match=match, player=player)
+        except IntegrityError:
+            raise MatchActionError("You're already on the waitlist.")
+
+    return match
+
+
+def leave_waitlist(match_id, player):
+    """Take `player` off the waitlist. Allowed at any time."""
+    with transaction.atomic():
+        match = Match.objects.select_for_update().get(pk=match_id)
+        deleted, _ = WaitlistEntry.objects.filter(match=match, player=player).delete()
+        if not deleted:
+            raise MatchActionError("You're not on the waitlist for this match.")
+
+    return match
+
+
+def promote_from_waitlist(match):
+    """Give the free spots to the players waiting in line, first come, first served.
+
+    Must be called inside a transaction that already holds the lock on `match`
+    (select_for_update), so two promotions can't hand out the same spot.
+    Returns the players who got a spot.
+    """
+    if match.status == Match.Status.CANCELLED or match.has_started:
+        return []
+
+    promoted = []
+    for entry in match.waitlist.select_related("player"):
+        if match.is_full:
+            break
+
+        block_reason = rejoin_block_reason(match, entry.player)
+        if block_reason:
+            # Someone the organizer removed never comes back through the waitlist
+            if match.exits.filter(player=entry.player, reason=MatchExit.Reason.REMOVED).exists():
+                entry.delete()
+            continue
+
+        Participation.objects.create(match=match, player=entry.player)
+        entry.delete()
+        promoted.append(entry.player)
+
+    return promoted
+
+
+def fill_open_spots(match_id):
+    """The organizer added spots to a match: move players up from the waitlist to fill them."""
+    with transaction.atomic():
+        match = Match.objects.select_for_update().get(pk=match_id)
+        promoted = promote_from_waitlist(match)
+        match.refresh_status()
+        match.save(update_fields=["status"])
+
+    return promoted
+
+
+def waitlist_position(match, player):
+    """1 for the first player in line, 2 for the next one... None if `player` isn't waiting."""
+    waiting = [entry.player_id for entry in match.waitlist.all()]
+    return waiting.index(player.id) + 1 if player.id in waiting else None
 
 
 def can_use_chat(match, user):

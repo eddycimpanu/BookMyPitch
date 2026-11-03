@@ -32,16 +32,28 @@ from .forms import (
     PitchForm,
     WeeklyHoursForm,
 )
-from .models import BlockedTime, Booking, ChatMessage, Match, OpeningHours, Participation, Pitch
+from .models import BlockedTime, Booking, ChatMessage, Match, OpeningHours, Participation, Pitch, WaitlistEntry
 from .services import (
     LEAVE_DEADLINE,
     MatchActionError,
     can_use_chat,
+    fill_open_spots,
     join_match,
+    join_waitlist,
     leave_match,
+    leave_waitlist,
     rejoin_block_reason,
     remove_player,
+    waitlist_position,
 )
+
+
+def player_names(players):
+    """Usernames as text, like 'ana' or 'ana and mihai'. Used in the messages about the waitlist."""
+    usernames = [player.username for player in players]
+    if len(usernames) == 1:
+        return usernames[0]
+    return ", ".join(usernames[:-1]) + " and " + usernames[-1]
 
 
 def day_label(value):
@@ -138,7 +150,8 @@ class MatchDetailView(DetailView):
 
     def get_queryset(self):
         return Match.objects.select_related("pitch", "organizer", "booking").prefetch_related(
-            "participations__player"
+            "participations__player",
+            "waitlist__player",
         )
 
     def get_context_data(self, **kwargs):
@@ -149,8 +162,9 @@ class MatchDetailView(DetailView):
         is_joined = user.is_authenticated and any(
             participation.player_id == user.id for participation in match.participations.all()
         )
+        position = waitlist_position(match, user) if user.is_authenticated else None
         is_open = match.status != Match.Status.CANCELLED and not match.has_started
-        could_join = is_open and not is_joined and not match.is_full and user != match.organizer
+        could_join = is_open and not is_joined and user != match.organizer
 
         block_reason = None
         if could_join and user.is_authenticated:
@@ -159,7 +173,10 @@ class MatchDetailView(DetailView):
         context.update({
             "open_slots": range(match.spots_left),
             "is_joined": is_joined,
-            "can_join": could_join and block_reason is None,
+            "can_join": could_join and not match.is_full and block_reason is None,
+            "can_join_waitlist": could_join and match.is_full and block_reason is None and position is None,
+            "waitlist_position": position,
+            "waitlist": match.waitlist.all() if is_open else [],
             "join_block_reason": block_reason,
             "can_leave": is_joined and timezone.now() <= match.start_time - LEAVE_DEADLINE,
             "can_chat": can_use_chat(match, user),
@@ -247,8 +264,15 @@ class MatchUpdateView(OrganizerRequiredMixin, UpdateView):
 
     def form_valid(self, form):
         form.instance.refresh_status()
-        messages.success(self.request, "Changes saved.")
-        return super().form_valid(form)
+        response = super().form_valid(form)
+
+        # More spots than before? The players waiting in line get them first.
+        promoted = fill_open_spots(self.object.pk)
+        message = "Changes saved."
+        if promoted:
+            message += f" {player_names(promoted)} moved up from the waitlist."
+        messages.success(self.request, message)
+        return response
 
 
 class MatchCancelView(OrganizerRequiredMixin, View):
@@ -273,11 +297,14 @@ class RemovePlayerView(OrganizerRequiredMixin, View):
 
     def post(self, request, pk):
         try:
-            player, match = remove_player(pk, request.user)
+            player, match, promoted = remove_player(pk, request.user)
         except Participation.DoesNotExist:
             raise Http404("This player is not in one of your matches.")
 
-        messages.success(request, f"{player.username} was removed and can't rejoin this match.")
+        message = f"{player.username} was removed and can't rejoin this match."
+        if promoted:
+            message += f" {player_names(promoted)} from the waitlist took the spot."
+        messages.success(request, message)
         return redirect("match_detail", pk=match.pk)
 
 
@@ -304,11 +331,42 @@ class LeaveMatchView(LoginRequiredMixin, View):
     def post(self, request, pk):
         match = get_object_or_404(Match, pk=pk)
         try:
-            leave_match(match.pk, request.user)
+            promoted = leave_match(match.pk, request.user)
         except MatchActionError as error:
             messages.error(request, str(error))
         else:
-            messages.success(request, "You left the match. Your spot is open again.")
+            if promoted:
+                messages.success(request, f"You left the match. {player_names(promoted)} from the waitlist took your spot.")
+            else:
+                messages.success(request, "You left the match. Your spot is open again.")
+        return redirect("match_detail", pk=match.pk)
+
+
+class JoinWaitlistView(LoginRequiredMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        match = get_object_or_404(Match, pk=pk)
+        try:
+            join_waitlist(match.pk, request.user)
+        except MatchActionError as error:
+            messages.error(request, str(error))
+        else:
+            messages.success(request, "You're on the waitlist. If a spot opens, it's yours automatically.")
+        return redirect("match_detail", pk=match.pk)
+
+
+class LeaveWaitlistView(LoginRequiredMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        match = get_object_or_404(Match, pk=pk)
+        try:
+            leave_waitlist(match.pk, request.user)
+        except MatchActionError as error:
+            messages.error(request, str(error))
+        else:
+            messages.success(request, "You left the waitlist.")
         return redirect("match_detail", pk=match.pk)
 
 
@@ -333,6 +391,16 @@ class JoinedMatchesView(LoginRequiredMixin, ListView):
             (upcoming if is_upcoming else past).append(match)
         context["upcoming"] = upcoming
         context["past"] = list(reversed(past))
+
+        # Upcoming matches where the player is waiting in line, with their place in the line
+        entries = (
+            WaitlistEntry.objects.filter(player=self.request.user, match__start_time__gt=now)
+            .exclude(match__status=Match.Status.CANCELLED)
+            .select_related("match__pitch")
+            .prefetch_related("match__waitlist", "match__participations")
+            .order_by("match__start_time")
+        )
+        context["waiting"] = [(entry.match, waitlist_position(entry.match, self.request.user)) for entry in entries]
         return context
 
 

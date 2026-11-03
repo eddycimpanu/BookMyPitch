@@ -297,6 +297,32 @@ class MatchExit(models.Model):
         return f"{self.player} {self.get_reason_display().lower()} ({self.match})"
 
 
+class WaitlistEntry(models.Model):
+    """A player waiting for a spot in a full match. The first in line gets the next free spot."""
+
+    match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name="waitlist")
+    player = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="waitlist_entries",
+    )
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # First come, first served. The id breaks ties if two players joined in the same instant.
+        ordering = ["joined_at", "id"]
+        verbose_name_plural = "waitlist entries"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["match", "player"],
+                name="unique_player_per_waitlist",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.player} waiting for {self.match}"
+
+
 # ---------- Pitch bookings ----------
 
 

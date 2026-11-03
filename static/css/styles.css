@@ -447,6 +447,30 @@ a:hover { color: var(--turf-dark); }
 }
 .lineup__note--joined { color: var(--floodlight); font-weight: 600; }
 
+/* ---------- Waitlist ---------- */
+.waitlist {
+  margin: 0 0 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+.waitlist__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #fff;
+  font-size: 1.1rem;
+  margin: 0 0 0.4rem;
+}
+.waitlist__count {
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.15);
+  font-size: 0.85rem;
+}
+.waitlist__list { margin: 0; padding-left: 1.4rem; color: rgba(255, 255, 255, 0.8); }
+.waitlist__list li { padding: 0.1rem 0; }
+.waitlist__you { color: var(--floodlight); font-weight: 600; }
+
 /* ---------- Team chat ---------- */
 .chat {
   margin-top: 1.5rem;
