@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Edit profile | BookMyPitch{% endblock %}
+
+{% block content %}
+<a href="{% url 'profile' user.username %}" class="back-link">Back to your profile</a>
+<h1 class="mt-2">Edit profile</h1>
+<p class="text-muted">Other players see this on your profile and next to your name in a lineup.</p>
+
+<div class="form-page">
+  <form method="post" enctype="multipart/form-data" novalidate class="form-card">
+    {% csrf_token %}
+
+    {% for error in form.non_field_errors %}
+      <div class="alert alert-danger">{{ error }}</div>
+    {% endfor %}
+
+    <div class="profile-photo-field mb-3">
+      {% include "includes/avatar.html" with person=user size="lg" %}
+      <div class="flex-grow-1">
+        <label class="form-label" for="{{ form.photo.id_for_label }}">{{ form.photo.label }}</label>
+        {{ form.photo }}
+        <div class="form-text">{{ form.photo.help_text }}</div>
+        {% for error in form.photo.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+        {% if form.remove_photo %}
+          <div class="form-check mt-2">
+            {{ form.remove_photo }}
+            <label class="form-check-label" for="{{ form.remove_photo.id_for_label }}">{{ form.remove_photo.label }}</label>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {% for field in form %}
+      {% if field.name != "photo" and field.name != "remove_photo" %}
+        <div class="mb-3">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+        </div>
+      {% endif %}
+    {% endfor %}
+
+    <button type="submit" class="btn btn-success btn-lg w-100">Save profile</button>
+  </form>
+</div>
+{% endblock %}

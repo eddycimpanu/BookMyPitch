@@ -239,6 +239,10 @@ class Match(models.Model):
     def has_started(self):
         return self.start_time <= timezone.now()
 
+    @property
+    def has_ended(self):
+        return self.end_time <= timezone.now()
+
     # Status
 
     def refresh_status(self):
@@ -258,6 +262,8 @@ class Participation(models.Model):
         related_name="participations",
     )
     joined_at = models.DateTimeField(auto_now_add=True)
+    # Set by the organizer after kick-off when the player didn't turn up
+    no_show = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["joined_at"]
@@ -323,6 +329,38 @@ class WaitlistEntry(models.Model):
 
     def __str__(self):
         return f"{self.player} waiting for {self.match}"
+
+
+class PlayerRating(models.Model):
+    """After a match, the people who played rate each other from 1 to 5 stars.
+
+    Profiles only show the average, never who gave which rating.
+    """
+
+    match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name="ratings")
+    rater = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="ratings_given",
+    )
+    rated = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="ratings_received",
+    )
+    stars = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            # One rating per teammate per match. Rating again changes it.
+            models.UniqueConstraint(fields=["match", "rater", "rated"], name="one_rating_per_teammate"),
+            models.CheckConstraint(condition=models.Q(stars__gte=1, stars__lte=5), name="stars_from_1_to_5"),
+            models.CheckConstraint(condition=~models.Q(rater=models.F("rated")), name="no_rating_yourself"),
+        ]
+
+    def __str__(self):
+        return f"{self.rater} gave {self.rated} {self.stars} stars ({self.match})"
 
 
 # ---------- Pitch bookings ----------

@@ -120,6 +120,10 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / "static"]
 
+# Uploaded files (profile photos). The media/ folder is in .gitignore.
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
 
 # Email
 # The console backend prints every email in the terminal where runserver runs, instead of sending it.

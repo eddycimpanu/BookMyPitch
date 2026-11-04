@@ -14,6 +14,7 @@ urlpatterns = [
     path("matches/<int:pk>/leave/", views.LeaveMatchView.as_view(), name="match_leave"),
     path("matches/<int:pk>/waitlist/join/", views.JoinWaitlistView.as_view(), name="waitlist_join"),
     path("matches/<int:pk>/waitlist/leave/", views.LeaveWaitlistView.as_view(), name="waitlist_leave"),
+    path("matches/<int:pk>/rate/<int:user_pk>/", views.RatePlayerView.as_view(), name="rate_player"),
     path("matches/<int:pk>/chat/", views.MatchChatView.as_view(), name="match_chat"),
     path("joined/", views.JoinedMatchesView.as_view(), name="joined_matches"),
 
@@ -28,6 +29,11 @@ urlpatterns = [
         "organizer/participations/<int:pk>/remove/",
         views.RemovePlayerView.as_view(),
         name="participation_remove",
+    ),
+    path(
+        "organizer/participations/<int:pk>/no-show/",
+        views.NoShowView.as_view(),
+        name="participation_no_show",
     ),
 
     # Pitch owners

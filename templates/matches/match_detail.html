@@ -25,6 +25,8 @@
       {% else %}
         <div class="alert alert-danger">The organizer cancelled this match.</div>
       {% endif %}
+    {% elif match.has_ended %}
+      <div class="alert alert-secondary">This match has been played.</div>
     {% elif match.has_started %}
       <div class="alert alert-secondary">This match has already started.</div>
     {% endif %}
@@ -66,7 +68,7 @@
       <p>{{ match.description|linebreaksbr }}</p>
     {% endif %}
     <p class="text-muted">
-      Organized by {{ match.organizer.username }}{% if match.booking.status == "confirmed" %}, pitch booked through BookMyPitch{% endif %}
+      Organized by <a href="{% url 'profile' match.organizer.username %}">{{ match.organizer.username }}</a>{% if match.booking.status == "confirmed" %}, pitch booked through BookMyPitch{% endif %}
     </p>
 
     <div id="match-map"
@@ -84,12 +86,19 @@
 
       <ul class="lineup__list">
         {% for participation in match.participations.all %}
-          <li class="lineup__slot{% if participation.player == user %} lineup__slot--you{% endif %}">
-            <span class="avatar">{{ participation.player.username|first|upper }}</span>
+          <li class="lineup__slot{% if participation.player == user %} lineup__slot--you{% endif %}{% if participation.no_show %} lineup__slot--no-show{% endif %}">
+            {% include "includes/avatar.html" with person=participation.player %}
             <span class="lineup__name">
-              {{ participation.player.username }}{% if participation.player == user %} (you){% endif %}
+              <a href="{% url 'profile' participation.player.username %}">{{ participation.player.username }}</a>{% if participation.player == user %} (you){% endif %}
+              {% if participation.no_show %}<span class="badge text-bg-danger ms-1">No-show</span>{% endif %}
             </span>
-            {% if user == match.organizer and not match.has_started %}
+            {% if can_mark_no_show %}
+              <form method="post" action="{% url 'participation_no_show' participation.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="no_show" value="{% if participation.no_show %}0{% else %}1{% endif %}">
+                <button type="submit" class="btn-remove">{% if participation.no_show %}Undo no-show{% else %}Didn't show up{% endif %}</button>
+              </form>
+            {% elif user == match.organizer and not match.has_started %}
               <form method="post" action="{% url 'participation_remove' participation.pk %}"
                     onsubmit="return confirm('Remove {{ participation.player.username|escapejs }}? They will not be able to rejoin this match.');">
                 {% csrf_token %}
@@ -175,6 +184,29 @@
         </button>
       {% endif %}
     </aside>
+
+    {% if teammates_to_rate %}
+      <section class="rate-card" id="rate" aria-labelledby="rate-title">
+        <h2 class="rate-card__title" id="rate-title">Rate your teammates</h2>
+        <p class="rate-card__note">Open for 48 hours after the match. Profiles show only the average, never who gave which rating.</p>
+        <ul class="rate-list">
+          {% for person, given in teammates_to_rate %}
+            <li class="rate-list__row">
+              {% include "includes/avatar.html" with person=person %}
+              <a class="rate-list__name" href="{% url 'profile' person.username %}">{{ person.username }}</a>
+              <form method="post" action="{% url 'rate_player' match.pk person.pk %}" class="stars" aria-label="Rate {{ person.username }}">
+                {% csrf_token %}
+                {% for n in star_choices %}
+                  <button type="submit" name="stars" value="{{ n }}"
+                          class="stars__star{% if given and n <= given %} stars__star--on{% endif %}"
+                          aria-label="{{ n }} of 5 stars"{% if given == n %} aria-pressed="true"{% endif %}>★</button>
+                {% endfor %}
+              </form>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
 
     {% if can_chat %}
       <section class="chat" id="chat" data-url="{% url 'match_chat' match.pk %}" aria-labelledby="chat-title">

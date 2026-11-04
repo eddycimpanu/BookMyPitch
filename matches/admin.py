@@ -9,6 +9,7 @@ from .models import (
     OpeningHours,
     Participation,
     Pitch,
+    PlayerRating,
     WaitlistEntry,
 )
 
@@ -17,6 +18,7 @@ class ParticipationInline(admin.TabularInline):
     model = Participation
     extra = 0
     readonly_fields = ("joined_at",)
+    fields = ("player", "joined_at", "no_show")
 
 
 class WaitlistInline(admin.TabularInline):
@@ -82,3 +84,10 @@ class BookingAdmin(admin.ModelAdmin):
 class BlockedTimeAdmin(admin.ModelAdmin):
     list_display = ("pitch", "start_time", "end_time", "reason")
     date_hierarchy = "start_time"
+
+
+@admin.register(PlayerRating)
+class PlayerRatingAdmin(admin.ModelAdmin):
+    list_display = ("rated", "stars", "rater", "match", "created_at")
+    list_filter = ("stars",)
+    search_fields = ("rated__username", "rater__username")

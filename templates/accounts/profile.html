@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}{{ profile_user.username }} | BookMyPitch{% endblock %}
+
+{% block content %}
+<header class="profile-hero">
+  {% include "includes/avatar.html" with person=profile_user size="xl" %}
+  <div class="profile-hero__text">
+    <h1>{{ profile_user.username }}</h1>
+    <div class="profile-tags">
+      <span class="role-pill role-pill--{{ profile_user.role }}">{{ profile_user.get_role_display }}</span>
+      {% if profile_user.position %}<span class="profile-tag">{{ profile_user.get_position_display }}</span>{% endif %}
+      {% if profile_user.level %}<span class="profile-tag">{{ profile_user.get_level_display }}</span>{% endif %}
+    </div>
+  </div>
+  {% if user == profile_user %}
+    <a href="{% url 'profile_edit' %}" class="btn btn-outline-secondary profile-hero__edit">Edit profile</a>
+  {% endif %}
+</header>
+
+{% if profile_user.is_owner %}
+  <h2 class="section-title">Pitches</h2>
+  {% if pitches %}
+    <ul class="past-list">
+      {% for pitch in pitches %}
+        <li><a href="{% url 'pitch_detail' pitch.pk %}">{{ pitch.name }}</a>, {{ pitch.address }}, {{ pitch.get_sector_display }}</li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="text-muted">No pitches listed yet.</p>
+  {% endif %}
+
+{% else %}
+  <div class="match-facts profile-stats">
+    <div class="fact">
+      <span class="fact__label">Rating</span>
+      <span class="fact__value">
+        {% if stats.rating_average is not None %}<span class="star-mark" aria-hidden="true">★</span> {{ stats.rating_average }}{% else %}–{% endif %}
+      </span>
+      <span class="fact__note">{% if stats.rating_count %}{{ stats.rating_count }} rating{{ stats.rating_count|pluralize }}{% else %}No ratings yet{% endif %}</span>
+    </div>
+    <div class="fact">
+      <span class="fact__label">Reliability</span>
+      <span class="fact__value">{% if stats.reliability is not None %}{{ stats.reliability }}%{% else %}–{% endif %}</span>
+      <span class="fact__note">
+        {% if stats.spots_taken %}Showed up {{ stats.showed_up }} of {{ stats.spots_taken }}{% else %}No matches as a player yet{% endif %}
+      </span>
+    </div>
+    <div class="fact">
+      <span class="fact__label">Matches played</span>
+      <span class="fact__value">{{ stats.matches_played }}</span>
+      <span class="fact__note">As a player or organizer</span>
+    </div>
+    <div class="fact">
+      <span class="fact__label">No-shows</span>
+      <span class="fact__value{% if stats.no_shows %} fact__value--warn{% endif %}">{{ stats.no_shows }}</span>
+      <span class="fact__note">Marked by organizers</span>
+    </div>
+  </div>
+
+  <h2 class="section-title">Recent matches</h2>
+  {% if recent_matches %}
+    <ul class="past-list">
+      {% for match in recent_matches %}
+        <li>
+          <a href="{% url 'match_detail' match.pk %}">{{ match.pitch.name }}</a>,
+          {{ match.start_time|date:"D j M, H:i" }}{% if match.organizer_id == profile_user.id %} <span class="badge text-bg-light ms-1">Organizer</span>{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="text-muted">No matches played yet.</p>
+  {% endif %}
+{% endif %}
+{% endblock %}

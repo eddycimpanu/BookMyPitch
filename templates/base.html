@@ -40,10 +40,11 @@
               <li class="nav-item"><a class="nav-link" href="{% url 'owner_bookings' %}">Bookings</a></li>
             {% endif %}
             <li class="nav-item">
-              <span class="user-chip">
+              <a class="user-chip" href="{% url 'profile' user.username %}" title="Your profile">
+                {% include "includes/avatar.html" with person=user size="sm" %}
                 {{ user.username }}
                 <span class="role-pill role-pill--{{ user.role }}">{{ user.get_role_display }}</span>
-              </span>
+              </a>
             </li>
             <li class="nav-item">
               <form method="post" action="{% url 'logout' %}">

@@ -97,7 +97,9 @@ a:hover { color: var(--turf-dark); }
   align-items: center;
   gap: 0.5rem;
   color: #fff;
+  text-decoration: none;
 }
+.user-chip:hover { color: #fff; text-decoration: underline; }
 
 .role-pill {
   font-size: 0.8rem;
@@ -470,6 +472,84 @@ a:hover { color: var(--turf-dark); }
 .waitlist__list { margin: 0; padding-left: 1.4rem; color: rgba(255, 255, 255, 0.8); }
 .waitlist__list li { padding: 0.1rem 0; }
 .waitlist__you { color: var(--floodlight); font-weight: 600; }
+
+/* ---------- Avatars ---------- */
+.avatar--photo { object-fit: cover; background: var(--turf-light); }
+.avatar--sm { width: 1.75rem; height: 1.75rem; font-size: 0.85rem; }
+.avatar--lg { width: 4.5rem; height: 4.5rem; font-size: 1.8rem; }
+.avatar--xl { width: 7rem; height: 7rem; font-size: 3rem; box-shadow: 0 0 0 4px #fff, 0 0 0 6px var(--turf); }
+
+/* ---------- Lineup: names, no-shows ---------- */
+.lineup__name a { color: inherit; text-decoration: none; }
+.lineup__name a:hover { text-decoration: underline; }
+.lineup__slot--no-show { opacity: 0.65; }
+.lineup__slot--no-show .lineup__name a { text-decoration: line-through; }
+
+/* ---------- Profile ---------- */
+.profile-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.25rem 1.5rem;
+  margin: 0.5rem 0 1.5rem;
+}
+.profile-hero__text { flex: 1; min-width: 12rem; }
+.profile-hero h1 { font-size: clamp(2.25rem, 5vw, 3.25rem); margin: 0 0 0.4rem; overflow-wrap: anywhere; }
+.profile-tags { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.profile-tags .role-pill { border: 1px solid var(--line); }
+.profile-tag {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: var(--turf-light);
+  color: var(--turf-dark);
+}
+.profile-stats { margin-top: 0; }
+.fact__note { display: block; color: var(--muted); font-size: 0.85rem; margin-top: 0.15rem; }
+.fact__value--warn { color: #b3261e; }
+.star-mark { color: var(--floodlight); }
+.profile-photo-field { display: flex; gap: 1rem; align-items: flex-start; }
+
+/* ---------- Rating teammates ---------- */
+.rate-card {
+  margin-top: 1.5rem;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-top: 5px solid var(--floodlight);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+}
+.rate-card__title { font-size: 1.6rem; margin: 0 0 0.25rem; }
+.rate-card__note { color: var(--muted); font-size: 0.9rem; margin-bottom: 0.75rem; }
+.rate-list { list-style: none; padding: 0; margin: 0; }
+.rate-list__row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.rate-list__row:last-child { border-bottom: 0; }
+.rate-list__name { flex: 1; min-width: 0; color: var(--ink); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+
+/* The stars are in the HTML from 5 down to 1 and shown reversed,
+   so "the hovered star and every star after it in the HTML" means "this star and the ones to its left". */
+.stars { display: inline-flex; flex-direction: row-reverse; margin: 0; }
+.stars__star {
+  background: none;
+  border: 0;
+  padding: 0 0.1rem;
+  font-size: 1.6rem;
+  line-height: 1;
+  color: var(--line);
+  cursor: pointer;
+}
+.stars__star--on { color: var(--floodlight); }
+.stars:hover .stars__star { color: var(--line); }
+.stars .stars__star:hover,
+.stars .stars__star:hover ~ .stars__star { color: var(--floodlight); }
+.stars__star:focus-visible { outline: 2px solid var(--turf); outline-offset: 2px; border-radius: 4px; }
 
 /* ---------- Team chat ---------- */
 .chat {

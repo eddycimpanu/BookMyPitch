@@ -1,0 +1,1 @@
+{% if person.photo %}<img src="{{ person.photo.url }}" alt="" class="avatar avatar--photo{% if size %} avatar--{{ size }}{% endif %}">{% else %}<span class="avatar{% if size %} avatar--{{ size }}{% endif %}" aria-hidden="true">{{ person.username|first|upper }}</span>{% endif %}

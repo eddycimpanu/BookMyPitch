@@ -34,6 +34,7 @@ from .forms import (
 )
 from .models import BlockedTime, Booking, ChatMessage, Match, OpeningHours, Participation, Pitch, WaitlistEntry
 from .notifications import notify_match_cancelled
+from .reputation import FEEDBACK_WINDOW, ReputationError, feedback_open, rate_player, set_no_show, teammates_to_rate
 from .services import (
     LEAVE_DEADLINE,
     MatchActionError,
@@ -178,6 +179,14 @@ class MatchDetailView(DetailView):
             "can_join_waitlist": could_join and match.is_full and block_reason is None and position is None,
             "waitlist_position": position,
             "waitlist": match.waitlist.all() if is_open else [],
+            "teammates_to_rate": teammates_to_rate(match, user),
+            "star_choices": [5, 4, 3, 2, 1],  # right to left, so the CSS can light up every star before the hovered one
+            "can_mark_no_show": (
+                user == match.organizer
+                and match.status != Match.Status.CANCELLED
+                and match.has_started
+                and timezone.now() <= match.end_time + FEEDBACK_WINDOW
+            ),
             "join_block_reason": block_reason,
             "can_leave": is_joined and timezone.now() <= match.start_time - LEAVE_DEADLINE,
             "can_chat": can_use_chat(match, user),
@@ -207,6 +216,7 @@ class MyMatchesView(OrganizerRequiredMixin, ListView):
         for match in context["matches"]:
             is_upcoming = match.start_time > now and match.status != Match.Status.CANCELLED
             (upcoming if is_upcoming else past).append(match)
+            match.can_rate = feedback_open(match, now)
         context["upcoming"] = upcoming
         context["past"] = list(reversed(past))
         return context
@@ -393,6 +403,7 @@ class JoinedMatchesView(LoginRequiredMixin, ListView):
         for match in context["matches"]:
             is_upcoming = match.start_time > now and match.status != Match.Status.CANCELLED
             (upcoming if is_upcoming else past).append(match)
+            match.can_rate = feedback_open(match, now)
         context["upcoming"] = upcoming
         context["past"] = list(reversed(past))
 
@@ -406,6 +417,42 @@ class JoinedMatchesView(LoginRequiredMixin, ListView):
         )
         context["waiting"] = [(entry.match, waitlist_position(entry.match, self.request.user)) for entry in entries]
         return context
+
+
+# ---------- Ratings and no-shows ----------
+
+
+class RatePlayerView(LoginRequiredMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request, pk, user_pk):
+        match = get_object_or_404(Match, pk=pk)
+        stars = request.POST.get("stars", "")
+        try:
+            rating = rate_player(match.pk, request.user, user_pk, int(stars) if stars.isdigit() else 0)
+        except ReputationError as error:
+            messages.error(request, str(error))
+        else:
+            messages.success(request, f"You gave {rating.rated.username} {rating.stars} star{'s' if rating.stars > 1 else ''}.")
+        return redirect(reverse("match_detail", args=[match.pk]) + "#rate")
+
+
+class NoShowView(OrganizerRequiredMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        no_show = request.POST.get("no_show") == "1"
+        try:
+            participation = set_no_show(pk, request.user, no_show)
+        except Participation.DoesNotExist:
+            raise Http404("This player is not in one of your matches.")
+        except ReputationError as error:
+            participation = get_object_or_404(Participation, pk=pk)
+            messages.error(request, str(error))
+        else:
+            name = participation.player.username
+            messages.success(request, f"{name} is marked as a no-show." if no_show else f"{name} is marked as played.")
+        return redirect("match_detail", pk=participation.match_id)
 
 
 # ---------- Team chat ----------

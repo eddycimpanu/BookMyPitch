@@ -17,8 +17,9 @@ Find and join pickup football matches on synthetic pitches in Bucharest. Pitch o
 - **No overbooked matches.** The last spot can't be taken twice, even when several players click at the same moment (row locking with `select_for_update`).
 - **Waitlist.** When a match is full, players can wait in line. When someone leaves, the first in line gets the spot automatically, in the same locked transaction, so nobody can jump the queue.
 - **Email notifications** when you move up from the waitlist, when your match fills up or is cancelled, and a reminder before kick-off. Emails go out only after the change is saved, so nobody hears about something that was rolled back.
+- **Player profiles and reputation.** Players add a photo, position and level. After a match, the people who played rate each other from 1 to 5 stars, and the organizer marks who didn't turn up. Profiles show the average rating and how reliable a player is.
 - **Fair-play rules.** A 1-hour cooldown before rejoining a match you left, no rejoining after being removed, and leaving closes 2 hours before kick-off.
-- **103 automated tests**, including concurrency tests, run on every push with GitHub Actions.
+- **127 automated tests**, including concurrency tests, run on every push with GitHub Actions.
 
 ## Screenshots
 
@@ -61,8 +62,8 @@ Run the tests with `python manage.py test`.
 ## Project structure
 
 ```
-accounts/    custom user model with player, organizer and pitch owner roles, sign up and log in
-matches/     pitches, bookings (bookings.py), matches, joining rules and waitlist (services.py), emails (notifications.py), team chat, map API, tests
+accounts/    custom user model with player, organizer and pitch owner roles, sign up, log in and profiles
+matches/     pitches, bookings (bookings.py), matches, joining rules and waitlist (services.py), emails (notifications.py), ratings and no-shows (reputation.py), team chat, map API, tests
 templates/   Django templates
 static/      styles and map / chat scripts
 ```

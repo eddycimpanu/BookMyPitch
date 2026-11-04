@@ -64,6 +64,7 @@
         <a href="{% url 'match_detail' match.pk %}">{{ match.pitch.name }}</a>,
         {{ match.start_time|date:"D j M, H:i" }}
         {% if match.status == "cancelled" %}<span class="badge text-bg-danger ms-1">{% if match.booking.cancelled_by_owner %}Cancelled by the pitch owner{% else %}Cancelled{% endif %}</span>{% endif %}
+        {% if match.can_rate %}<a href="{% url 'match_detail' match.pk %}#rate" class="badge text-bg-warning ms-1 text-decoration-none">Rate your teammates</a>{% endif %}
       </li>
     {% endfor %}
   </ul>
