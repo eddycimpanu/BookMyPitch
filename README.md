@@ -32,6 +32,7 @@ Find and join pickup football matches on synthetic pitches in Bucharest. Pitch o
 - **Backend:** Python 3.12, Django 6, PostgreSQL
 - **Frontend:** Django templates, Bootstrap 5, JavaScript, Leaflet with OpenStreetMap
 - **Testing and CI:** Django's test framework, GitHub Actions
+- **Containers:** Docker and Docker Compose
 
 ## Run locally
 
@@ -58,6 +59,16 @@ python manage.py send_match_reminders --every 300
 ```
 
 Run the tests with `python manage.py test`.
+
+## Run with Docker
+
+With [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed, you don't need Python or PostgreSQL on your machine. Copy `.env.example` to `.env`, then:
+
+```bash
+docker compose up --build
+```
+
+This starts PostgreSQL, runs the migrations and serves the app at http://localhost:8000. A third container sends the kick-off reminders. Create an admin account with `docker compose exec web python manage.py createsuperuser`, run the tests with `docker compose exec web python manage.py test`, and stop everything with `docker compose down`.
 
 ## Project structure
 

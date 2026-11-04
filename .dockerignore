@@ -1,0 +1,11 @@
+# Kept out of the image: local environment, secrets, uploads and caches
+venv/
+.env
+media/
+.git/
+.github/
+__pycache__/
+*.pyc
+.vscode/
+.idea/
+docs/
