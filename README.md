@@ -1,40 +1,57 @@
 # BookMyPitch
 
 [![Tests](https://github.com/eddycimpanu/bookmypitch/actions/workflows/tests.yml/badge.svg)](https://github.com/eddycimpanu/bookmypitch/actions/workflows/tests.yml)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![Django](https://img.shields.io/badge/Django-6-0C4B33?logo=django&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)
 
-Find and join pickup football matches on synthetic pitches in Bucharest. Pitch owners list their pitches with opening hours, organizers book a free hour and post a match with open spots, and players take a spot and coordinate in a team chat.
+Pickup football on synthetic pitches in Bucharest. Find a match on the map, take a spot, talk to your team, or book a free hour on a pitch and fill it with players.
 
-![Map of matches and bookable pitches in Bucharest](docs/screenshots/home.png)
+![Map of upcoming matches and bookable pitches in Bucharest](docs/screenshots/home.png)
 
-## Features
+## What you can do
 
-- **Map of matches and pitches**, with filters by day, sector and open spots.
-- **Three roles:**
-  - **Players** join and leave matches and talk to their team in a private chat.
-  - **Organizers** book a free hour on a listed pitch, which creates the match, or post a match on any pitch they add to the map. They can edit and cancel matches and remove players.
-  - **Pitch owners** list pitches with a price per hour and weekly opening hours, see who booked them, cancel bookings with a reason and block hours for maintenance.
-- **No double bookings.** PostgreSQL itself refuses two overlapping bookings of the same pitch (an exclusion constraint on time ranges).
-- **No overbooked matches.** The last spot can't be taken twice, even when several players click at the same moment (row locking with `select_for_update`).
-- **Waitlist.** When a match is full, players can wait in line. When someone leaves, the first in line gets the spot automatically, in the same locked transaction, so nobody can jump the queue.
-- **Email notifications** when you move up from the waitlist, when your match fills up or is cancelled, and a reminder before kick-off. Emails go out only after the change is saved, so nobody hears about something that was rolled back.
-- **Player profiles and reputation.** Players add a photo, position and level. After a match, the people who played rate each other from 1 to 5 stars, and the organizer marks who didn't turn up. Profiles show the average rating and how reliable a player is.
-- **Fair-play rules.** A 1-hour cooldown before rejoining a match you left, no rejoining after being removed, and leaving closes 2 hours before kick-off.
-- **127 automated tests**, including concurrency tests, run on every push with GitHub Actions.
+| Role | What they can do |
+| --- | --- |
+| **Player** | Find matches on the map by day, sector and open spots. Take a spot or join the waitlist, chat with the team, rate teammates after the game. |
+| **Organizer** | Book a free hour on a listed pitch, which creates the match, or post a match on any pitch. Edit, cancel, remove players and mark no-shows. |
+| **Pitch owner** | List pitches with a price and weekly opening hours, see every booking, cancel with a reason and block hours for maintenance. |
 
 ## Screenshots
 
-| Match page and team chat | Booking a pitch | Owner's bookings |
-| --- | --- | --- |
-| ![Match page with lineup and team chat](docs/screenshots/match.png) | ![Picking a day, duration and start time](docs/screenshots/booking.png) | ![Owner's upcoming bookings and blocked times](docs/screenshots/owner.png) |
+| Match page with lineup and waitlist | Player profile and reputation |
+| --- | --- |
+| ![Match page](docs/screenshots/match.png) | ![Player profile](docs/screenshots/profile.png) |
+| **Booking a pitch** | **Owner's bookings** |
+| ![Booking a pitch](docs/screenshots/booking.png) | ![Owner's bookings](docs/screenshots/owner.png) |
+
+## Under the hood
+
+- **No double bookings.** PostgreSQL itself refuses two overlapping bookings of the same pitch, with an exclusion constraint on time ranges.
+- **No overbooked matches.** The last spot can't be taken twice, even when many players click at once, thanks to row locking (`select_for_update`) inside transactions.
+- **Fair waitlist.** When someone leaves a full match, the first player in line gets the spot in the same locked transaction, so nobody can jump the queue.
+- **Emails that never lie.** Notifications (spot freed, match full, cancelled, kick-off reminder) are sent only after the change is committed.
+- **Reputation.** 1 to 5 star ratings between players who actually played, and a reliability score from no-shows marked by the organizer.
+- **127 automated tests**, including concurrency tests with real threads, run on every push with GitHub Actions.
 
 ## Tech stack
 
-- **Backend:** Python 3.12, Django 6, PostgreSQL
-- **Frontend:** Django templates, Bootstrap 5, JavaScript, Leaflet with OpenStreetMap
-- **Testing and CI:** Django's test framework, GitHub Actions
-- **Containers:** Docker and Docker Compose
+Python 3.12 · Django 6 · PostgreSQL 18 · Django templates · Bootstrap 5 · JavaScript · Leaflet with OpenStreetMap · Docker · GitHub Actions
 
-## Run locally
+## Getting started
+
+### With Docker
+
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/), copy `.env.example` to `.env`, then:
+
+```bash
+docker compose up --build
+```
+
+The app runs at http://localhost:8000, with PostgreSQL and the kick-off reminders in their own containers. Create an admin with `docker compose exec web python manage.py createsuperuser`.
+
+### Without Docker
 
 ```bash
 git clone https://github.com/eddycimpanu/bookmypitch.git
@@ -44,37 +61,20 @@ venv\Scripts\activate          # macOS / Linux: source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Create a PostgreSQL database owned by your database user (the migrations enable the `btree_gist` extension, and the tests need the `CREATEDB` permission). Copy `.env.example` to `.env` and fill in your values. Then:
+Create a PostgreSQL database owned by your database user (the migrations enable `btree_gist`, and the tests need `CREATEDB`). Copy `.env.example` to `.env`, fill it in, then:
 
 ```bash
 python manage.py migrate
-python manage.py createsuperuser
 python manage.py runserver
 ```
 
-In development, emails are printed in the terminal instead of being sent. To send the kick-off reminders, keep this running in a second terminal:
-
-```bash
-python manage.py send_match_reminders --every 300
-```
-
-Run the tests with `python manage.py test`.
-
-## Run with Docker
-
-With [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed, you don't need Python or PostgreSQL on your machine. Copy `.env.example` to `.env`, then:
-
-```bash
-docker compose up --build
-```
-
-This starts PostgreSQL, runs the migrations and serves the app at http://localhost:8000. A third container sends the kick-off reminders. Create an admin account with `docker compose exec web python manage.py createsuperuser`, run the tests with `docker compose exec web python manage.py test`, and stop everything with `docker compose down`.
+Emails are printed in the terminal. Run `python manage.py send_match_reminders --every 300` for the reminders, and `python manage.py test` for the tests.
 
 ## Project structure
 
 ```
-accounts/    custom user model with player, organizer and pitch owner roles, sign up, log in and profiles
-matches/     pitches, bookings (bookings.py), matches, joining rules and waitlist (services.py), emails (notifications.py), ratings and no-shows (reputation.py), team chat, map API, tests
+accounts/    users with player, organizer and pitch owner roles, sign up, log in, profiles
+matches/     pitches, matches, bookings, waitlist, team chat, emails, ratings, map API, tests
 templates/   Django templates
-static/      styles and map / chat scripts
+static/      styles, map and chat scripts
 ```
